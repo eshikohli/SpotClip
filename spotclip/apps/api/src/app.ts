@@ -7,6 +7,7 @@ import type {
   Collection,
   SavePlacesRequest,
   SavePlacesResponse,
+  CollectionsListResponse,
   ApiError,
 } from "@spotclip/shared";
 import { getMockPlaces } from "./mock";
@@ -71,28 +72,52 @@ app.post(
   },
 );
 
+// ── GET /collections ─────────────────────────────────────────────────
+app.get("/collections", (_req, res) => {
+  const all = Array.from(collections.values()).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+  const response: CollectionsListResponse = { collections: all };
+  res.json(response);
+});
+
 // ── POST /collections/:id/places ─────────────────────────────────────
 app.post("/collections/:id/places", (req, res) => {
   const { id } = req.params;
   const body = req.body as SavePlacesRequest;
 
-  if (!body.name || !Array.isArray(body.places)) {
-    const err: ApiError = { error: "name and places[] are required" };
+  if (!Array.isArray(body.places)) {
+    const err: ApiError = { error: "places[] is required" };
     res.status(400).json(err);
     return;
   }
 
-  const collection: Collection = {
-    id,
-    name: body.name,
-    places: body.places,
-    created_at: new Date().toISOString(),
-  };
+  const existing = collections.get(id);
 
-  collections.set(id, collection);
+  if (existing) {
+    // Append places to existing collection
+    existing.places = [...existing.places, ...body.places];
+    if (body.name) existing.name = body.name;
+    const response: SavePlacesResponse = { collection: existing };
+    res.status(200).json(response);
+  } else {
+    // Create new collection — name required
+    if (!body.name) {
+      const err: ApiError = { error: "name is required for new collections" };
+      res.status(400).json(err);
+      return;
+    }
 
-  const response: SavePlacesResponse = { collection };
-  res.status(201).json(response);
+    const collection: Collection = {
+      id,
+      name: body.name,
+      places: body.places,
+      created_at: new Date().toISOString(),
+    };
+    collections.set(id, collection);
+    const response: SavePlacesResponse = { collection };
+    res.status(201).json(response);
+  }
 });
 
 // ── GET /collections/:id ─────────────────────────────────────────────

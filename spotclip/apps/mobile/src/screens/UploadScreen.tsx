@@ -12,12 +12,14 @@ import {
   Platform,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { v4 as uuid } from "uuid";
 import type { ExtractedPlace } from "@spotclip/shared";
-import { ingestClip, saveCollection } from "./api";
-import { PlaceCard } from "./PlaceCard";
+import { ingestClip } from "../api";
+import { PlaceCard } from "../PlaceCard";
+import { CollectionPickerModal } from "../components/CollectionPickerModal";
+import { CreateCollectionModal } from "../components/CreateCollectionModal";
+import type { UploadScreenProps } from "../navigation/types";
 
-type Step = "input" | "loading" | "review" | "saved";
+type Step = "input" | "loading" | "review";
 
 interface MediaFile {
   uri: string;
@@ -25,14 +27,15 @@ interface MediaFile {
   type: string;
 }
 
-export function HomeScreen() {
+export function UploadScreen({ navigation }: UploadScreenProps) {
   const [step, setStep] = useState<Step>("input");
   const [tiktokUrl, setTiktokUrl] = useState("");
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [places, setPlaces] = useState<ExtractedPlace[]>([]);
-  const [collectionName, setCollectionName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [showPicker, setShowPicker] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
 
   // ── Pick images ──────────────────────────────────────────────────
   async function pickImages() {
@@ -116,32 +119,19 @@ export function HomeScreen() {
     setEditName("");
   }
 
-  // ── Save collection ──────────────────────────────────────────────
-  async function handleSave() {
-    if (!collectionName.trim()) {
-      Alert.alert("Error", "Please name your collection");
-      return;
-    }
-    if (places.length === 0) {
-      Alert.alert("Error", "Add at least one place");
-      return;
-    }
-
-    try {
-      await saveCollection(uuid(), collectionName, places);
-      setStep("saved");
-    } catch (e) {
-      Alert.alert("Error", e instanceof Error ? e.message : "Save failed");
-    }
-  }
-
   // ── Reset ────────────────────────────────────────────────────────
   function handleReset() {
     setStep("input");
     setTiktokUrl("");
     setMediaFiles([]);
     setPlaces([]);
-    setCollectionName("");
+  }
+
+  // ── On saved from modals ─────────────────────────────────────────
+  function handleSaved(collectionId: string) {
+    setShowPicker(false);
+    setShowCreate(false);
+    navigation.replace("CollectionDetail", { collectionId });
   }
 
   // ── Render ───────────────────────────────────────────────────────
@@ -150,8 +140,6 @@ export function HomeScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Text style={styles.title}>SpotClip</Text>
-
       {step === "input" && (
         <View style={styles.section}>
           <Text style={styles.label}>TikTok URL</Text>
@@ -176,8 +164,7 @@ export function HomeScreen() {
           </View>
           {mediaFiles.length > 0 && (
             <Text style={styles.fileCount}>
-              {mediaFiles.length} file{mediaFiles.length > 1 ? "s" : ""}{" "}
-              selected
+              {mediaFiles.length} file{mediaFiles.length > 1 ? "s" : ""} selected
             </Text>
           )}
 
@@ -225,52 +212,51 @@ export function HomeScreen() {
             )}
             ListEmptyComponent={
               <Text style={styles.empty}>
-                All places removed. Go back to start over.
+                All places removed. Start over to try again.
               </Text>
             }
             style={styles.list}
           />
 
-          <TextInput
-            style={styles.input}
-            placeholder="Collection name"
-            placeholderTextColor="#aaa"
-            value={collectionName}
-            onChangeText={setCollectionName}
-          />
-
           <View style={styles.reviewActions}>
             <TouchableOpacity
-              style={[styles.primaryBtn, styles.secondaryBtn]}
-              onPress={handleReset}
+              style={[styles.actionBtn, styles.actionBtnOutline]}
+              onPress={() => setShowPicker(true)}
             >
-              <Text style={styles.secondaryBtnText}>Start Over</Text>
+              <Text style={styles.actionBtnOutlineText}>Save to Collection</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.primaryBtn, { flex: 1 }]}
-              onPress={handleSave}
+              style={[styles.actionBtn, styles.actionBtnPrimary]}
+              onPress={() => setShowCreate(true)}
             >
-              <Text style={styles.primaryBtnText}>Save Collection</Text>
+              <Text style={styles.primaryBtnText}>Create New Collection</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleReset}>
+              <Text style={styles.startOverText}>Start Over</Text>
             </TouchableOpacity>
           </View>
         </View>
       )}
 
-      {step === "saved" && (
-        <View style={styles.center}>
-          <Text style={styles.savedText}>Collection saved!</Text>
-          <TouchableOpacity style={styles.primaryBtn} onPress={handleReset}>
-            <Text style={styles.primaryBtnText}>New Clip</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      <CollectionPickerModal
+        visible={showPicker}
+        places={places}
+        onSaved={handleSaved}
+        onCancel={() => setShowPicker(false)}
+      />
+
+      <CreateCollectionModal
+        visible={showCreate}
+        places={places}
+        onSaved={handleSaved}
+        onCancel={() => setShowCreate(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fafafa", padding: 20, paddingTop: 60 },
-  title: { fontSize: 28, fontWeight: "700", color: "#1a1a1a", marginBottom: 20 },
+  container: { flex: 1, backgroundColor: "#fafafa", padding: 20 },
   section: { flex: 1 },
   label: { fontSize: 14, fontWeight: "600", color: "#444", marginBottom: 6 },
   input: {
@@ -303,14 +289,16 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   primaryBtnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  secondaryBtn: { backgroundColor: "#e5e5e5", marginRight: 10 },
-  secondaryBtnText: { color: "#333", fontSize: 16, fontWeight: "600" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   loadingText: { marginTop: 12, fontSize: 15, color: "#666" },
   editBar: { flexDirection: "row", gap: 8, marginBottom: 12, alignItems: "center" },
   saveEditBtn: { backgroundColor: "#4f46e5", borderRadius: 8, paddingHorizontal: 16, paddingVertical: 12 },
   list: { flex: 1, marginBottom: 12 },
   empty: { textAlign: "center", color: "#999", marginTop: 40 },
-  reviewActions: { flexDirection: "row", alignItems: "center" },
-  savedText: { fontSize: 22, fontWeight: "600", color: "#16a34a", marginBottom: 20 },
+  reviewActions: { gap: 10, paddingBottom: 10 },
+  actionBtn: { borderRadius: 10, paddingVertical: 14, alignItems: "center" },
+  actionBtnPrimary: { backgroundColor: "#4f46e5" },
+  actionBtnOutline: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#4f46e5" },
+  actionBtnOutlineText: { color: "#4f46e5", fontSize: 16, fontWeight: "600" },
+  startOverText: { textAlign: "center", color: "#999", fontSize: 15, paddingVertical: 8 },
 });

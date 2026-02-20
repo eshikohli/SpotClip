@@ -3,7 +3,7 @@ import request from "supertest";
 import path from "path";
 import fs from "fs";
 import { app } from "../app";
-import type { IngestResponse, SavePlacesResponse } from "@spotclip/shared";
+import type { IngestResponse, SavePlacesResponse, CollectionsListResponse } from "@spotclip/shared";
 
 // Create a tiny temp file for upload tests
 const FIXTURE_PATH = path.join(__dirname, "fixture.txt");
@@ -89,6 +89,44 @@ describe("POST /collections/:id/places", () => {
     const getRes = await request(app).get("/collections/col-1");
     expect(getRes.status).toBe(200);
     expect(getRes.body.name).toBe("Tokyo Trip");
+  });
+});
+
+describe("POST /collections/:id/places – append", () => {
+  it("appends places to an existing collection", async () => {
+    // Create initial collection
+    await request(app)
+      .post("/collections/col-append/places")
+      .send({
+        name: "Append Test",
+        places: [
+          { id: "a1", name: "Place A", city_guess: "NYC", confidence: 0.8, evidence: { source: "frame", index: 0 } },
+        ],
+      });
+
+    // Append more places
+    const res = await request(app)
+      .post("/collections/col-append/places")
+      .send({
+        places: [
+          { id: "a2", name: "Place B", city_guess: "LA", confidence: 0.7, evidence: { source: "frame", index: 1 } },
+        ],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.collection.places).toHaveLength(2);
+    expect(res.body.collection.places[0].name).toBe("Place A");
+    expect(res.body.collection.places[1].name).toBe("Place B");
+  });
+});
+
+describe("GET /collections", () => {
+  it("returns an array of collections", async () => {
+    const res = await request(app).get("/collections");
+    expect(res.status).toBe(200);
+    const body = res.body as CollectionsListResponse;
+    expect(Array.isArray(body.collections)).toBe(true);
+    expect(body.collections.length).toBeGreaterThanOrEqual(1);
   });
 });
 

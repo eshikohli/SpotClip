@@ -47,6 +47,8 @@ OPENAI_API_KEY=sk-... npm run dev:api
 npm run dev:mobile
 ```
 
+The mobile app uses `expo-crypto` for UUID generation (RN-safe); it is installed with `npm install` from the repo root.
+
 ## Available scripts
 
 | Command            | Description                          |

@@ -4,8 +4,8 @@ import type { ExtractedPlace } from "@spotclip/shared";
 
 interface Props {
   place: ExtractedPlace;
-  onDelete: (id: string) => void;
-  onEdit: (id: string) => void;
+  onDelete?: (id: string) => void;
+  onEdit?: (id: string) => void;
 }
 
 export function PlaceCard({ place, onDelete, onEdit }: Props) {
@@ -21,17 +21,23 @@ export function PlaceCard({ place, onDelete, onEdit }: Props) {
             : `audio @${place.evidence.timestamp_s}s`}
         </Text>
       </View>
-      <View style={styles.actions}>
-        <TouchableOpacity onPress={() => onEdit(place.id)} style={styles.btn}>
-          <Text style={styles.btnText}>Edit</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => onDelete(place.id)}
-          style={[styles.btn, styles.deleteBtn]}
-        >
-          <Text style={[styles.btnText, styles.deleteText]}>Delete</Text>
-        </TouchableOpacity>
-      </View>
+      {(onEdit || onDelete) && (
+        <View style={styles.actions}>
+          {onEdit && (
+            <TouchableOpacity onPress={() => onEdit(place.id)} style={styles.btn}>
+              <Text style={styles.btnText}>Edit</Text>
+            </TouchableOpacity>
+          )}
+          {onDelete && (
+            <TouchableOpacity
+              onPress={() => onDelete(place.id)}
+              style={[styles.btn, styles.deleteBtn]}
+            >
+              <Text style={[styles.btnText, styles.deleteText]}>Delete</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
     </View>
   );
 }

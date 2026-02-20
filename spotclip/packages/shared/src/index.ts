@@ -48,6 +48,11 @@ export interface SavePlacesResponse {
   collection: Collection;
 }
 
+// ── GET /collections ─────────────────────────────────────────────────
+export interface CollectionsListResponse {
+  collections: Collection[];
+}
+
 // ── Generic API error ────────────────────────────────────────────────
 export interface ApiError {
   error: string;
