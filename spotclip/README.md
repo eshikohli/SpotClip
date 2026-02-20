@@ -21,6 +21,19 @@ spotclip/
 - Expo CLI (`npx expo`)
 - iOS Simulator or Android Emulator (or Expo Go on a physical device)
 
+## Environment variables
+
+| Variable         | Required | Description                          |
+| ---------------- | -------- | ------------------------------------ |
+| `OPENAI_API_KEY` | Yes      | OpenAI API key for image extraction  |
+| `PORT`           | No       | API port (default: 3001)             |
+
+Create a `.env` file in the repo root or export the variable:
+
+```bash
+export OPENAI_API_KEY=sk-
+```
+
 ## Getting started
 
 ```bash
@@ -28,7 +41,7 @@ spotclip/
 npm install
 
 # Start the API (http://localhost:3001)
-npm run dev:api
+OPENAI_API_KEY=sk-... npm run dev:api
 
 # In a second terminal, start the mobile app
 npm run dev:mobile
@@ -59,7 +72,11 @@ Multipart form with:
 - `tiktok_url` (string) - the TikTok video URL
 - `media` (file[]) - one or more video/image files
 
-Returns mock extracted places (real extraction not yet implemented).
+Extraction behavior depends on upload type:
+- **Images** — real extraction via OpenAI Vision (gpt-4o-mini). Returns actual place names found in the images.
+- **Video** — returns mock extracted places (real video extraction not yet implemented).
+
+If the OpenAI call fails, the endpoint still returns 200 with an empty places array and an `error` field.
 
 ### POST /collections/:id/places
 
@@ -77,6 +94,6 @@ Runs vitest tests for the API routes (7 tests covering validation, ingest, and c
 
 1. Enter a TikTok URL
 2. Pick images or a video file
-3. Tap "Extract Places" to upload and get mock results
+3. Tap "Extract Places" to upload (images → real extraction, video → mock)
 4. Edit or delete extracted places
 5. Name and save the collection

@@ -10,6 +10,7 @@ import type {
   ApiError,
 } from "@spotclip/shared";
 import { getMockPlaces } from "./mock";
+import { extractPlacesFromImages } from "./vision";
 
 export const app = express();
 
@@ -21,11 +22,20 @@ const upload = multer({ dest: "uploads/" });
 // In-memory store for collections
 const collections = new Map<string, Collection>();
 
+const IMAGE_MIMES = new Set([
+  "image/jpeg", "image/png", "image/gif", "image/webp",
+  "image/jpg", "image/heic", "image/heif",
+]);
+
+function isImageUpload(files: Express.Multer.File[]): boolean {
+  return files.every((f) => IMAGE_MIMES.has(f.mimetype));
+}
+
 // ── POST /clips/ingest ───────────────────────────────────────────────
 app.post(
   "/clips/ingest",
   upload.array("media", 10),
-  (req, res) => {
+  async (req, res) => {
     const tiktokUrl = req.body?.tiktok_url;
 
     if (!tiktokUrl || typeof tiktokUrl !== "string") {
@@ -41,12 +51,23 @@ app.post(
       return;
     }
 
-    const response: IngestResponse = {
-      clip_id: uuid(),
-      places: getMockPlaces(),
-    };
-
-    res.status(200).json(response);
+    if (isImageUpload(files)) {
+      // Real extraction via OpenAI Vision
+      const { places, error } = await extractPlacesFromImages(files);
+      const response: IngestResponse & { error?: string } = {
+        clip_id: uuid(),
+        places,
+        ...(error ? { error } : {}),
+      };
+      res.status(200).json(response);
+    } else {
+      // Video or mixed uploads → mock extraction
+      const response: IngestResponse = {
+        clip_id: uuid(),
+        places: getMockPlaces(),
+      };
+      res.status(200).json(response);
+    }
   },
 );
 
