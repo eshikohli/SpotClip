@@ -6,7 +6,7 @@ export function MainScreen({ navigation }: MainScreenProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>SpotClip</Text>
-      <Text style={styles.subtitle}>Save places from your favorite clips</Text>
+      <Text style={styles.subtitle}>Save places from social media videos</Text>
 
       <View style={styles.buttons}>
         <TouchableOpacity
