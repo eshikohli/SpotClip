@@ -27,8 +27,8 @@ app.use(express.json());
 
 const upload = multer({ dest: "uploads/" });
 
-// In-memory store for collections
-const collections = new Map<string, Collection>();
+// In-memory store for collections (exported for demo seeding when SEED_DEMO_DATA=true)
+export const collections = new Map<string, Collection>();
 
 const IMAGE_MIMES = new Set([
   "image/jpeg", "image/png", "image/gif", "image/webp",

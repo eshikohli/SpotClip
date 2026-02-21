@@ -27,6 +27,7 @@ spotclip/
 | ---------------- | -------- | ------------------------------------ |
 | `OPENAI_API_KEY` | Yes      | OpenAI API key for image extraction  |
 | `PORT`           | No       | API port (default: 3001)             |
+| `SEED_DEMO_DATA` | No       | Set to `true` to seed demo collections on startup (default: false). Dev/demo only. |
 
 Create a `.env` file in the repo root or export the variable:
 
@@ -83,6 +84,17 @@ If the OpenAI call fails, the endpoint still returns 200 with an empty places ar
 ### POST /collections/:id/places
 
 JSON body: `{ name: string, places: ExtractedPlace[] }`
+
+## Demo mode
+
+When developing or demoing the app, you can pre-fill the API with demo collections so the app is not empty on launch.
+
+- **Enable:** set `SEED_DEMO_DATA=true` when starting the API (e.g. `SEED_DEMO_DATA=true npm run dev:api` or add to `.env`).
+- **What gets created:** Two collections are added only if they do not already exist (idempotent):
+  - **Seattle** — 4 spots (e.g. Pike Place Market, Space Needle, Museum of Pop Culture, Starbucks Reserve Roastery) with a mix of tags, notes, favorites, and visited states.
+  - **Manhattan** — 5 spots (e.g. Central Park, Empire State Building, Times Square, The High Line, Katz's Delicatessen) with the same variety for demoing the UI.
+- **Reset:** The API uses an in-memory store. Restarting the API clears all data. With `SEED_DEMO_DATA=true`, the demo collections are re-seeded on each restart. If you do not set the flag, the API starts with no collections (current behavior).
+- **Safety:** Seeding runs only when `SEED_DEMO_DATA=true`; if the flag is unset or false, no seeding runs and behavior is unchanged.
 
 ## Testing
 
