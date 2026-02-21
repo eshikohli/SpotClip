@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   Alert,
+  ScrollView,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import type { Collection, ExtractedPlace } from "@spotclip/shared";
@@ -22,6 +23,7 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
   const [loading, setLoading] = useState(true);
   const [editModalPlace, setEditModalPlace] = useState<ExtractedPlace | null>(null);
   const [noteModalPlace, setNoteModalPlace] = useState<ExtractedPlace | null>(null);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -53,6 +55,24 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
       return aVisited - bVisited;
     });
   }, [collection]);
+
+  const availableTags = useMemo(() => {
+    if (!collection) return [];
+    const set = new Set<string>();
+    for (const p of collection.places) {
+      for (const t of p.tags ?? []) set.add(t);
+    }
+    return Array.from(set).sort();
+  }, [collection]);
+
+  const filteredPlaces = useMemo(() => {
+    if (!selectedTag) return sortedPlaces;
+    return sortedPlaces.filter((p) => (p.tags ?? []).includes(selectedTag));
+  }, [sortedPlaces, selectedTag]);
+
+  const handleTagPress = useCallback((tag: string | null) => {
+    setSelectedTag((prev) => (prev === tag ? null : tag));
+  }, []);
 
   const handleFavorite = useCallback(
     async (placeId: string, isFavorite: boolean) => {
@@ -208,24 +228,62 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
     );
   }
 
+  const tagFilterHeader = (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.tagFilterScroll}
+      contentContainerStyle={styles.tagFilterContent}
+    >
+      <TouchableOpacity
+        style={[styles.tagChip, selectedTag === null && styles.tagChipSelected]}
+        onPress={() => handleTagPress(null)}
+      >
+        <Text style={[styles.tagChipText, selectedTag === null && styles.tagChipTextSelected]}>
+          All
+        </Text>
+      </TouchableOpacity>
+      {availableTags.map((tag) => {
+        const selected = selectedTag === tag;
+        return (
+          <TouchableOpacity
+            key={tag}
+            style={[styles.tagChip, selected && styles.tagChipSelected]}
+            onPress={() => handleTagPress(tag)}
+          >
+            <Text style={[styles.tagChipText, selected && styles.tagChipTextSelected]}>
+              {tag}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
+
   return (
     <View style={styles.container}>
       <FlatList
-        data={sortedPlaces}
+        style={styles.listWrapper}
+        data={filteredPlaces}
         keyExtractor={(item) => item.id}
+        ListHeaderComponent={tagFilterHeader}
         renderItem={({ item }) => (
           <PlaceCard
             place={item}
             onFavorite={handleFavorite}
             onVisited={handleVisited}
             onDelete={handleDelete}
-            onEdit={(id) => setEditModalPlace(sortedPlaces.find((p) => p.id === id) ?? null)}
+            onEdit={(id) => setEditModalPlace(filteredPlaces.find((p) => p.id === id) ?? null)}
             onViewNote={(p) => setNoteModalPlace(p)}
           />
         )}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
-          <Text style={styles.emptyText}>No places in this collection yet.</Text>
+          <Text style={styles.emptyText}>
+            {selectedTag
+              ? `No spots with tag "${selectedTag}".`
+              : "No places in this collection yet."}
+          </Text>
         }
       />
       <TouchableOpacity
@@ -254,7 +312,25 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fafafa" },
   center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fafafa" },
   errorText: { fontSize: 16, color: "#c33" },
-  list: { padding: 20 },
+  tagFilterScroll: { marginBottom: 10 },
+  tagFilterContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 4,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  listWrapper: { flex: 1 },
+  tagChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 18,
+    backgroundColor: "#e8e4f0",
+    marginRight: 8,
+  },
+  tagChipSelected: { backgroundColor: "#4f46e5" },
+  tagChipText: { fontSize: 15, lineHeight: 18, color: "#555", fontWeight: "500" },
+  tagChipTextSelected: { color: "#fff", fontWeight: "600" },
+  list: { paddingTop: 8, paddingHorizontal: 20, paddingBottom: 20 },
   emptyText: { textAlign: "center", color: "#999", marginTop: 40 },
   primaryBtn: {
     backgroundColor: "#4f46e5",
