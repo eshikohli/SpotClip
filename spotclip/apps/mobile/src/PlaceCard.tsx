@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { ExtractedPlace } from "@spotclip/shared";
+import { getTagColor } from "./tagColors";
 
 interface Props {
   place: ExtractedPlace;
@@ -13,6 +14,8 @@ interface Props {
   subtitle?: string;
   /** When provided and place has a note, tapping the row opens note view */
   onViewNote?: (place: ExtractedPlace) => void;
+  /** Show extraction metadata (confidence · frame). Default true (e.g. upload/review). Set false in collection/favorites. */
+  showExtractionMeta?: boolean;
 }
 
 export function PlaceCard({
@@ -23,6 +26,7 @@ export function PlaceCard({
   onVisited,
   subtitle,
   onViewNote,
+  showExtractionMeta = true,
 }: Props) {
   const isVisited = place.isVisited === true;
   const isFavorite = place.isFavorite === true;
@@ -50,14 +54,19 @@ export function PlaceCard({
       ) : null}
       {tags.length > 0 && (
         <View style={styles.tagRow}>
-          {tags.map((tag) => (
-            <View key={tag} style={styles.tagChip}>
-              <Text style={[styles.tagChipText, isVisited && styles.textVisited]}>{tag}</Text>
-            </View>
-          ))}
+          {tags.map((tag) => {
+            const { backgroundColor, color } = getTagColor(tag);
+            return (
+              <View key={tag} style={[styles.tagChip, { backgroundColor }]}>
+                <Text style={[styles.tagChipText, { color }, isVisited && styles.textVisited]}>
+                  {tag}
+                </Text>
+              </View>
+            );
+          })}
         </View>
       )}
-      {place.evidence != null && (
+      {showExtractionMeta && place.evidence != null && (
         <Text style={[styles.confidence, isVisited && styles.textVisited]}>
           {Math.round((place.confidence ?? 0) * 100)}% confidence ·{" "}
           {place.evidence.source === "frame"
@@ -177,18 +186,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
-    backgroundColor: "#e0e7ff",
   },
-  tagChipText: { fontSize: 11, color: "#4338ca" },
+  tagChipText: { fontSize: 11 },
   confidence: { fontSize: 12, color: "#999", marginTop: 4 },
   iconRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   iconBtn: { padding: 4 },
   actions: { gap: 6 },
   btn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 6,
     backgroundColor: "#f0f0f0",
+    alignItems: "center",
+    justifyContent: "center",
   },
   deleteBtn: { backgroundColor: "#fee" },
   btnText: { fontSize: 13, fontWeight: "500", color: "#333" },

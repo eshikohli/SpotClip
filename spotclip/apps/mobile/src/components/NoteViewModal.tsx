@@ -1,6 +1,7 @@
 import React from "react";
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import type { ExtractedPlace } from "@spotclip/shared";
+import { getTagColor } from "../tagColors";
 
 interface Props {
   visible: boolean;
@@ -20,11 +21,14 @@ export function NoteViewModal({ visible, place, onClose }: Props) {
             <Text style={styles.placeName}>{place.name}</Text>
             {(place.tags ?? []).length > 0 && (
               <View style={styles.tagRow}>
-                {(place.tags ?? []).map((tag) => (
-                  <View key={tag} style={styles.tagChip}>
-                    <Text style={styles.tagChipText}>{tag}</Text>
-                  </View>
-                ))}
+                {(place.tags ?? []).map((tag) => {
+                  const { backgroundColor, color } = getTagColor(tag);
+                  return (
+                    <View key={tag} style={[styles.tagChip, { backgroundColor }]}>
+                      <Text style={[styles.tagChipText, { color }]}>{tag}</Text>
+                    </View>
+                  );
+                })}
               </View>
             )}
             {hasNote ? (
@@ -63,9 +67,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    backgroundColor: "#e0e7ff",
   },
-  tagChipText: { fontSize: 12, color: "#4338ca" },
+  tagChipText: { fontSize: 12 },
   noteText: { fontSize: 15, color: "#333", lineHeight: 22, marginBottom: 16 },
   noNote: { fontSize: 14, color: "#999", marginBottom: 16 },
   closeBtn: {

@@ -168,6 +168,7 @@ export function FavoritesDetailScreen() {
             onDelete={handleDelete}
             onEdit={(id) => setEditModalPlace(sorted.find((p) => p.id === id) ?? null)}
             onViewNote={(p) => setNoteModalPlace(p as FavoriteItem)}
+            showExtractionMeta={false}
           />
         )}
         contentContainerStyle={styles.list}

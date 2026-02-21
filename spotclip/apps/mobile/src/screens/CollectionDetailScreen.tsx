@@ -15,6 +15,7 @@ import { getCollection, toggleFavorite, toggleVisited, deletePlace, updatePlace 
 import { PlaceCard } from "../PlaceCard";
 import { EditSpotModal } from "../components/EditSpotModal";
 import { NoteViewModal } from "../components/NoteViewModal";
+import { getTagColor } from "../tagColors";
 import type { CollectionDetailScreenProps } from "../navigation/types";
 
 export function CollectionDetailScreen({ route, navigation }: CollectionDetailScreenProps) {
@@ -236,7 +237,7 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
       contentContainerStyle={styles.tagFilterContent}
     >
       <TouchableOpacity
-        style={[styles.tagChip, selectedTag === null && styles.tagChipSelected]}
+        style={[styles.tagChipAll, selectedTag === null && styles.tagChipAllSelected]}
         onPress={() => handleTagPress(null)}
       >
         <Text style={[styles.tagChipText, selectedTag === null && styles.tagChipTextSelected]}>
@@ -245,15 +246,18 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
       </TouchableOpacity>
       {availableTags.map((tag) => {
         const selected = selectedTag === tag;
+        const { backgroundColor, color } = getTagColor(tag);
         return (
           <TouchableOpacity
             key={tag}
-            style={[styles.tagChip, selected && styles.tagChipSelected]}
+            style={[
+              styles.tagChipFilter,
+              { backgroundColor },
+              selected && { borderWidth: 2, borderColor: color },
+            ]}
             onPress={() => handleTagPress(tag)}
           >
-            <Text style={[styles.tagChipText, selected && styles.tagChipTextSelected]}>
-              {tag}
-            </Text>
+            <Text style={[styles.tagChipText, { color }]}>{tag}</Text>
           </TouchableOpacity>
         );
       })}
@@ -275,6 +279,7 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
             onDelete={handleDelete}
             onEdit={(id) => setEditModalPlace(filteredPlaces.find((p) => p.id === id) ?? null)}
             onViewNote={(p) => setNoteModalPlace(p)}
+            showExtractionMeta={false}
           />
         )}
         contentContainerStyle={styles.list}
@@ -320,14 +325,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   listWrapper: { flex: 1 },
-  tagChip: {
+  tagChipAll: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 18,
     backgroundColor: "#e8e4f0",
     marginRight: 8,
   },
-  tagChipSelected: { backgroundColor: "#4f46e5" },
+  tagChipAllSelected: { backgroundColor: "#4f46e5" },
+  tagChipFilter: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 18,
+    marginRight: 8,
+  },
   tagChipText: { fontSize: 15, lineHeight: 18, color: "#555", fontWeight: "500" },
   tagChipTextSelected: { color: "#fff", fontWeight: "600" },
   list: { paddingTop: 8, paddingHorizontal: 20, paddingBottom: 20 },

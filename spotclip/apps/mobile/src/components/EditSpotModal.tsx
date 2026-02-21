@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import type { ExtractedPlace } from "@spotclip/shared";
 import { SPOT_TAGS } from "@spotclip/shared";
+import { getTagColor } from "../tagColors";
 
 interface Props {
   visible: boolean;
@@ -77,13 +78,24 @@ export function EditSpotModal({ visible, place, onSave, onCancel }: Props) {
             <View style={styles.tagRow}>
               {SPOT_TAGS.map((tag) => {
                 const selected = selectedTags.includes(tag);
+                const { backgroundColor, color } = getTagColor(tag);
                 return (
                   <TouchableOpacity
                     key={tag}
-                    style={[styles.tagChip, selected && styles.tagChipSelected]}
+                    style={[
+                      styles.tagChip,
+                      { backgroundColor: selected ? undefined : backgroundColor },
+                      selected && styles.tagChipSelected,
+                    ]}
                     onPress={() => toggleTag(tag)}
                   >
-                    <Text style={[styles.tagChipText, selected && styles.tagChipTextSelected]}>
+                    <Text
+                      style={[
+                        styles.tagChipText,
+                        { color: selected ? undefined : color },
+                        selected && styles.tagChipTextSelected,
+                      ]}
+                    >
                       {tag}
                     </Text>
                   </TouchableOpacity>
@@ -140,10 +152,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: "#f0f0f0",
   },
   tagChipSelected: { backgroundColor: "#4f46e5" },
-  tagChipText: { fontSize: 13, color: "#555" },
+  tagChipText: { fontSize: 13 },
   tagChipTextSelected: { color: "#fff", fontWeight: "600" },
   actions: { flexDirection: "row", gap: 12, justifyContent: "flex-end" },
   cancelBtn: { paddingVertical: 12, paddingHorizontal: 20 },
