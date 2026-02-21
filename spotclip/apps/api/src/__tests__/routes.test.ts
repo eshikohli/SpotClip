@@ -3,7 +3,12 @@ import request from "supertest";
 import path from "path";
 import fs from "fs";
 import { app } from "../app";
-import type { IngestResponse, SavePlacesResponse, CollectionsListResponse } from "@spotclip/shared";
+import type {
+  IngestResponse,
+  SavePlacesResponse,
+  CollectionsListResponse,
+  FavoritesResponse,
+} from "@spotclip/shared";
 
 // Create a tiny temp file for upload tests
 const FIXTURE_PATH = path.join(__dirname, "fixture.txt");
@@ -89,6 +94,9 @@ describe("POST /collections/:id/places", () => {
     const getRes = await request(app).get("/collections/col-1");
     expect(getRes.status).toBe(200);
     expect(getRes.body.name).toBe("Tokyo Trip");
+    expect(getRes.body.places[0]).toHaveProperty("isFavorite");
+    expect(getRes.body.places[0]).toHaveProperty("isVisited");
+    expect(getRes.body.places[0]).toHaveProperty("created_at");
   });
 });
 
@@ -134,5 +142,112 @@ describe("GET /collections/:id", () => {
   it("returns 404 for unknown collection", async () => {
     const res = await request(app).get("/collections/nonexistent");
     expect(res.status).toBe(404);
+  });
+});
+
+describe("PATCH /collections/:collectionId/places/:placeId", () => {
+  it("returns 404 for unknown collection", async () => {
+    const res = await request(app)
+      .patch("/collections/nonexistent/places/p1")
+      .send({ isFavorite: true });
+    expect(res.status).toBe(404);
+  });
+
+  it("updates isFavorite and isVisited", async () => {
+    await request(app)
+      .post("/collections/col-patch/places")
+      .send({
+        name: "Patch Test",
+        places: [
+          {
+            id: "place-patch-1",
+            name: "Spot A",
+            city_guess: "NYC",
+            confidence: 0.8,
+            evidence: { source: "frame", index: 0 },
+          },
+        ],
+      });
+
+    const patchRes = await request(app)
+      .patch("/collections/col-patch/places/place-patch-1")
+      .send({ isFavorite: true, isVisited: true });
+    expect(patchRes.status).toBe(200);
+    expect(patchRes.body.collection.places[0].isFavorite).toBe(true);
+    expect(patchRes.body.collection.places[0].isVisited).toBe(true);
+
+    const getRes = await request(app).get("/collections/col-patch");
+    expect(getRes.body.places[0].isFavorite).toBe(true);
+    expect(getRes.body.places[0].isVisited).toBe(true);
+  });
+});
+
+describe("DELETE /collections/:collectionId/places/:placeId", () => {
+  it("returns 404 for unknown collection", async () => {
+    const res = await request(app).delete("/collections/nonexistent/places/p1");
+    expect(res.status).toBe(404);
+  });
+
+  it("removes place from collection", async () => {
+    await request(app)
+      .post("/collections/col-del/places")
+      .send({
+        name: "Delete Test",
+        places: [
+          {
+            id: "place-del-1",
+            name: "To Remove",
+            city_guess: "LA",
+            confidence: 0.7,
+            evidence: { source: "frame", index: 0 },
+          },
+        ],
+      });
+
+    const delRes = await request(app).delete("/collections/col-del/places/place-del-1");
+    expect(delRes.status).toBe(200);
+    expect(delRes.body.collection.places).toHaveLength(0);
+
+    const getRes = await request(app).get("/collections/col-del");
+    expect(getRes.body.places).toHaveLength(0);
+  });
+});
+
+describe("GET /favorites", () => {
+  it("returns empty list when no favorites", async () => {
+    const res = await request(app).get("/favorites");
+    expect(res.status).toBe(200);
+    const body = res.body as FavoritesResponse;
+    expect(Array.isArray(body.favorites)).toBe(true);
+  });
+
+  it("returns favorited places with collection info", async () => {
+    await request(app)
+      .post("/collections/col-fav/places")
+      .send({
+        name: "Fav Collection",
+        places: [
+          {
+            id: "place-fav-1",
+            name: "Favorite Spot",
+            city_guess: "Paris",
+            confidence: 0.9,
+            evidence: { source: "frame", index: 0 },
+          },
+        ],
+      });
+    await request(app)
+      .patch("/collections/col-fav/places/place-fav-1")
+      .send({ isFavorite: true });
+
+    const res = await request(app).get("/favorites");
+    expect(res.status).toBe(200);
+    const body = res.body as FavoritesResponse;
+    expect(body.favorites.length).toBeGreaterThanOrEqual(1);
+    const fav = body.favorites.find((f) => f.id === "place-fav-1");
+    expect(fav).toBeDefined();
+    expect(fav!.name).toBe("Favorite Spot");
+    expect(fav!.collectionId).toBe("col-fav");
+    expect(fav!.collectionName).toBe("Fav Collection");
   });
 });

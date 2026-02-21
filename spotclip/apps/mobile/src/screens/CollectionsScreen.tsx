@@ -8,9 +8,10 @@ import {
   StyleSheet,
   Dimensions,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import type { Collection } from "@spotclip/shared";
-import { getCollections } from "../api";
+import { getCollections, getFavorites } from "../api";
 import type { CollectionsScreenProps } from "../navigation/types";
 
 const PASTEL_COLORS = [
@@ -23,17 +24,26 @@ const CARD_WIDTH = (Dimensions.get("window").width - 20 * 2 - COLUMN_GAP) / 2;
 
 export function CollectionsScreen({ navigation }: CollectionsScreenProps) {
   const [collections, setCollections] = useState<Collection[]>([]);
+  const [favoritesCount, setFavoritesCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
       setLoading(true);
-      getCollections()
-        .then((data) => {
-          if (active) setCollections(data.collections);
+      Promise.all([getCollections(), getFavorites()])
+        .then(([colData, favData]) => {
+          if (active) {
+            setCollections(colData.collections);
+            setFavoritesCount(favData.favorites.length);
+          }
         })
-        .catch(() => {})
+        .catch(() => {
+          if (active) {
+            setCollections([]);
+            setFavoritesCount(0);
+          }
+        })
         .finally(() => {
           if (active) setLoading(false);
         });
@@ -49,7 +59,8 @@ export function CollectionsScreen({ navigation }: CollectionsScreenProps) {
     );
   }
 
-  if (collections.length === 0) {
+  const showEmpty = collections.length === 0 && favoritesCount === 0;
+  if (showEmpty) {
     return (
       <View style={styles.center}>
         <Text style={styles.emptyText}>No collections yet</Text>
@@ -63,6 +74,24 @@ export function CollectionsScreen({ navigation }: CollectionsScreenProps) {
     );
   }
 
+  const favoritesHeader =
+    favoritesCount > 0 ? (
+      <TouchableOpacity
+        style={styles.favoritesCard}
+        onPress={() => navigation.navigate("Favorites")}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="heart" size={28} color="#e11" />
+        <View style={styles.favoritesCardText}>
+          <Text style={styles.favoritesCardName}>Favorites</Text>
+          <Text style={styles.favoritesCardCount}>
+            {favoritesCount} spot{favoritesCount !== 1 ? "s" : ""}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={22} color="#666" />
+      </TouchableOpacity>
+    ) : null;
+
   return (
     <FlatList
       data={collections}
@@ -70,6 +99,7 @@ export function CollectionsScreen({ navigation }: CollectionsScreenProps) {
       numColumns={2}
       columnWrapperStyle={styles.row}
       contentContainerStyle={styles.grid}
+      ListHeaderComponent={favoritesHeader}
       renderItem={({ item, index }) => (
         <TouchableOpacity
           style={[styles.card, { backgroundColor: PASTEL_COLORS[index % PASTEL_COLORS.length] }]}
@@ -89,6 +119,24 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: "#fafafa" },
   emptyText: { fontSize: 18, color: "#999", marginBottom: 16 },
   grid: { padding: 20 },
+  favoritesCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: COLUMN_GAP,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  favoritesCardText: { flex: 1, marginLeft: 12 },
+  favoritesCardName: { fontSize: 17, fontWeight: "600", color: "#1a1a1a" },
+  favoritesCardCount: { fontSize: 13, color: "#666", marginTop: 2 },
   row: { justifyContent: "space-between", marginBottom: COLUMN_GAP },
   card: {
     width: CARD_WIDTH,

@@ -9,6 +9,9 @@ import type {
   SavePlacesResponse,
   CollectionsListResponse,
   ApiError,
+  ExtractedPlace,
+  FavoritesResponse,
+  FavoriteItem,
 } from "@spotclip/shared";
 import { getMockPlaces } from "./mock";
 import { extractPlacesFromImages } from "./vision";
@@ -30,6 +33,18 @@ const IMAGE_MIMES = new Set([
 
 function isImageUpload(files: Express.Multer.File[]): boolean {
   return files.every((f) => IMAGE_MIMES.has(f.mimetype));
+}
+
+/** Normalize incoming place for storage: ensure id, isFavorite, isVisited, created_at */
+function normalizePlace(p: ExtractedPlace): ExtractedPlace {
+  const now = new Date().toISOString();
+  return {
+    ...p,
+    id: p.id ?? uuid(),
+    isFavorite: p.isFavorite ?? false,
+    isVisited: p.isVisited ?? false,
+    created_at: p.created_at ?? now,
+  };
 }
 
 // ── POST /clips/ingest ───────────────────────────────────────────────
@@ -94,9 +109,11 @@ app.post("/collections/:id/places", (req, res) => {
 
   const existing = collections.get(id);
 
+  const normalized = body.places.map(normalizePlace);
+
   if (existing) {
     // Append places to existing collection
-    existing.places = [...existing.places, ...body.places];
+    existing.places = [...existing.places, ...normalized];
     if (body.name) existing.name = body.name;
     const response: SavePlacesResponse = { collection: existing };
     res.status(200).json(response);
@@ -111,13 +128,78 @@ app.post("/collections/:id/places", (req, res) => {
     const collection: Collection = {
       id,
       name: body.name,
-      places: body.places,
+      places: normalized,
       created_at: new Date().toISOString(),
     };
     collections.set(id, collection);
     const response: SavePlacesResponse = { collection };
     res.status(201).json(response);
   }
+});
+
+// ── PATCH /collections/:collectionId/places/:placeId ──────────────────
+app.patch("/collections/:collectionId/places/:placeId", (req, res) => {
+  const { collectionId, placeId } = req.params;
+  const body = req.body as { isFavorite?: boolean; isVisited?: boolean };
+
+  const collection = collections.get(collectionId);
+  if (!collection) {
+    const err: ApiError = { error: "Collection not found" };
+    res.status(404).json(err);
+    return;
+  }
+
+  const place = collection.places.find((p) => p.id === placeId);
+  if (!place) {
+    const err: ApiError = { error: "Place not found" };
+    res.status(404).json(err);
+    return;
+  }
+
+  if (typeof body.isFavorite === "boolean") place.isFavorite = body.isFavorite;
+  if (typeof body.isVisited === "boolean") place.isVisited = body.isVisited;
+
+  res.status(200).json({ collection });
+});
+
+// ── DELETE /collections/:collectionId/places/:placeId ─────────────────
+app.delete("/collections/:collectionId/places/:placeId", (req, res) => {
+  const { collectionId, placeId } = req.params;
+
+  const collection = collections.get(collectionId);
+  if (!collection) {
+    const err: ApiError = { error: "Collection not found" };
+    res.status(404).json(err);
+    return;
+  }
+
+  const prevLen = collection.places.length;
+  collection.places = collection.places.filter((p) => p.id !== placeId);
+  if (collection.places.length === prevLen) {
+    const err: ApiError = { error: "Place not found" };
+    res.status(404).json(err);
+    return;
+  }
+
+  res.status(200).json({ collection });
+});
+
+// ── GET /favorites ───────────────────────────────────────────────────
+app.get("/favorites", (_req, res) => {
+  const favorites: FavoriteItem[] = [];
+  for (const col of collections.values()) {
+    for (const place of col.places) {
+      if (place.isFavorite) {
+        favorites.push({
+          ...place,
+          collectionId: col.id,
+          collectionName: col.name,
+        });
+      }
+    }
+  }
+  const response: FavoritesResponse = { favorites };
+  res.json(response);
 });
 
 // ── GET /collections/:id ─────────────────────────────────────────────

@@ -4,6 +4,7 @@ import type {
   CollectionsListResponse,
   Collection,
   ExtractedPlace,
+  FavoritesResponse,
 } from "@spotclip/shared";
 
 const BASE_URL = __DEV__
@@ -97,5 +98,69 @@ export async function addPlacesToCollection(
     throw new Error(err.error ?? "Save failed");
   }
 
+  return res.json();
+}
+
+export async function getFavorites(): Promise<FavoritesResponse> {
+  const res = await fetch(`${BASE_URL}/favorites`);
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error ?? "Failed to fetch favorites");
+  }
+  return res.json();
+}
+
+export async function toggleFavorite(
+  collectionId: string,
+  placeId: string,
+  isFavorite: boolean,
+): Promise<{ collection: Collection }> {
+  const res = await fetch(
+    `${BASE_URL}/collections/${collectionId}/places/${placeId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isFavorite }),
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error ?? "Update failed");
+  }
+  return res.json();
+}
+
+export async function toggleVisited(
+  collectionId: string,
+  placeId: string,
+  isVisited: boolean,
+): Promise<{ collection: Collection }> {
+  const res = await fetch(
+    `${BASE_URL}/collections/${collectionId}/places/${placeId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isVisited }),
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error ?? "Update failed");
+  }
+  return res.json();
+}
+
+export async function deletePlace(
+  collectionId: string,
+  placeId: string,
+): Promise<{ collection: Collection }> {
+  const res = await fetch(
+    `${BASE_URL}/collections/${collectionId}/places/${placeId}`,
+    { method: "DELETE" },
+  );
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error ?? "Delete failed");
+  }
   return res.json();
 }

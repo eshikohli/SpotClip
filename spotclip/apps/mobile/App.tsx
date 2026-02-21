@@ -7,6 +7,7 @@ import { MainScreen } from "./src/screens/MainScreen";
 import { UploadScreen } from "./src/screens/UploadScreen";
 import { CollectionsScreen } from "./src/screens/CollectionsScreen";
 import { CollectionDetailScreen } from "./src/screens/CollectionDetailScreen";
+import { FavoritesDetailScreen } from "./src/screens/FavoritesDetailScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -41,6 +42,11 @@ export default function App() {
           name="CollectionDetail"
           component={CollectionDetailScreen}
           options={{ title: "Collection" }}
+        />
+        <Stack.Screen
+          name="Favorites"
+          component={FavoritesDetailScreen}
+          options={{ title: "Favorites" }}
         />
       </Stack.Navigator>
       <StatusBar style="auto" />

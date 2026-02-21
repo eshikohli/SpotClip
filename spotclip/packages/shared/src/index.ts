@@ -18,6 +18,12 @@ export interface ExtractedPlace {
   city_guess: string;
   confidence: number;
   evidence: Evidence;
+  /** Set when stored in a collection; default false */
+  isFavorite?: boolean;
+  /** Set when stored in a collection; default false */
+  isVisited?: boolean;
+  /** Set when stored in a collection */
+  created_at?: string;
 }
 
 // ── POST /clips/ingest ───────────────────────────────────────────────
@@ -51,6 +57,16 @@ export interface SavePlacesResponse {
 // ── GET /collections ─────────────────────────────────────────────────
 export interface CollectionsListResponse {
   collections: Collection[];
+}
+
+// ── GET /favorites ───────────────────────────────────────────────────
+export interface FavoriteItem extends ExtractedPlace {
+  collectionId: string;
+  collectionName: string;
+}
+
+export interface FavoritesResponse {
+  favorites: FavoriteItem[];
 }
 
 // ── Generic API error ────────────────────────────────────────────────
