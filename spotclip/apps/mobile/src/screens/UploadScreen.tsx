@@ -10,6 +10,8 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  ScrollView,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import type { ExtractedPlace } from "@spotclip/shared";
@@ -53,6 +55,11 @@ export function UploadScreen({ navigation }: UploadScreenProps) {
       }));
       setMediaFiles((prev) => [...prev, ...files]);
     }
+  }
+
+  // ── Remove a file from the upload list ───────────────────────────
+  function removeMediaFile(index: number) {
+    setMediaFiles((prev) => prev.filter((_, i) => i !== index));
   }
 
   // ── Pick video ───────────────────────────────────────────────────
@@ -163,9 +170,36 @@ export function UploadScreen({ navigation }: UploadScreenProps) {
             </TouchableOpacity>
           </View>
           {mediaFiles.length > 0 && (
-            <Text style={styles.fileCount}>
-              {mediaFiles.length} file{mediaFiles.length > 1 ? "s" : ""} selected
-            </Text>
+            <View style={styles.thumbnailsRow}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.thumbnailsContent}
+              >
+                {mediaFiles.map((file, index) => (
+                  <View key={`${file.uri}-${index}`} style={styles.thumbnailWrap}>
+                    {file.type.startsWith("image/") ? (
+                      <Image
+                        source={{ uri: file.uri }}
+                        style={styles.thumbnail}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.thumbnailPlaceholder}>
+                        <Text style={styles.thumbnailPlaceholderText}>Video</Text>
+                      </View>
+                    )}
+                    <TouchableOpacity
+                      style={styles.thumbnailRemove}
+                      onPress={() => removeMediaFile(index)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.thumbnailRemoveText}>×</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
           )}
 
           <TouchableOpacity style={styles.primaryBtn} onPress={handleSubmit}>
@@ -280,7 +314,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   mediaPickText: { fontSize: 15, color: "#4f46e5", fontWeight: "600" },
-  fileCount: { fontSize: 13, color: "#666", marginBottom: 8 },
+  thumbnailsRow: { marginBottom: 12 },
+  thumbnailsContent: { flexDirection: "row", gap: 10, paddingVertical: 4 },
+  thumbnailWrap: { width: 72, height: 72, position: "relative" },
+  thumbnail: { width: 72, height: 72, borderRadius: 8 },
+  thumbnailPlaceholder: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    backgroundColor: "#e5e7eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  thumbnailPlaceholderText: { fontSize: 11, color: "#6b7280", fontWeight: "600" },
+  thumbnailRemove: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  thumbnailRemoveText: { color: "#fff", fontSize: 18, fontWeight: "600", lineHeight: 20 },
   primaryBtn: {
     backgroundColor: "#4f46e5",
     borderRadius: 8,
