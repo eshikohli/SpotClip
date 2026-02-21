@@ -9,15 +9,19 @@ import {
   Alert,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import type { Collection } from "@spotclip/shared";
-import { getCollection, toggleFavorite, toggleVisited, deletePlace } from "../api";
+import type { Collection, ExtractedPlace } from "@spotclip/shared";
+import { getCollection, toggleFavorite, toggleVisited, deletePlace, updatePlace } from "../api";
 import { PlaceCard } from "../PlaceCard";
+import { EditSpotModal } from "../components/EditSpotModal";
+import { NoteViewModal } from "../components/NoteViewModal";
 import type { CollectionDetailScreenProps } from "../navigation/types";
 
 export function CollectionDetailScreen({ route, navigation }: CollectionDetailScreenProps) {
   const { collectionId } = route.params;
   const [collection, setCollection] = useState<Collection | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editModalPlace, setEditModalPlace] = useState<ExtractedPlace | null>(null);
+  const [noteModalPlace, setNoteModalPlace] = useState<ExtractedPlace | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -151,6 +155,43 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
     [collection, collectionId],
   );
 
+  const handleEditSave = useCallback(
+    async (placeId: string, payload: { note: string | null; tags: string[] }) => {
+      if (!collection) return;
+      const previous = collection.places.find((p) => p.id === placeId);
+      if (!previous) return;
+      setCollection((c) =>
+        c
+          ? {
+              ...c,
+              places: c.places.map((p) =>
+                p.id === placeId
+                  ? { ...p, note: payload.note, tags: payload.tags }
+                  : p,
+              ),
+            }
+          : null,
+      );
+      setEditModalPlace(null);
+      try {
+        await updatePlace(collectionId, placeId, payload);
+      } catch {
+        setCollection((c) =>
+          c
+            ? {
+                ...c,
+                places: c.places.map((p) =>
+                  p.id === placeId ? { ...p, note: previous.note, tags: previous.tags } : p,
+                ),
+              }
+            : null,
+        );
+        Alert.alert("Error", "Failed to update spot");
+      }
+    },
+    [collection, collectionId],
+  );
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -178,6 +219,8 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
             onFavorite={handleFavorite}
             onVisited={handleVisited}
             onDelete={handleDelete}
+            onEdit={(id) => setEditModalPlace(sortedPlaces.find((p) => p.id === id) ?? null)}
+            onViewNote={(p) => setNoteModalPlace(p)}
           />
         )}
         contentContainerStyle={styles.list}
@@ -191,6 +234,18 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
       >
         <Text style={styles.primaryBtnText}>Upload a New Spot</Text>
       </TouchableOpacity>
+
+      <EditSpotModal
+        visible={editModalPlace !== null}
+        place={editModalPlace}
+        onSave={handleEditSave}
+        onCancel={() => setEditModalPlace(null)}
+      />
+      <NoteViewModal
+        visible={noteModalPlace !== null}
+        place={noteModalPlace}
+        onClose={() => setNoteModalPlace(null)}
+      />
     </View>
   );
 }

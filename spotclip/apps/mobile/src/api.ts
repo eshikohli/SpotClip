@@ -164,3 +164,23 @@ export async function deletePlace(
   }
   return res.json();
 }
+
+export async function updatePlace(
+  collectionId: string,
+  placeId: string,
+  payload: { note?: string | null; tags?: string[] },
+): Promise<{ collection: Collection }> {
+  const res = await fetch(
+    `${BASE_URL}/collections/${collectionId}/places/${placeId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error ?? "Update failed");
+  }
+  return res.json();
+}

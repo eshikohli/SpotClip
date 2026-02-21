@@ -24,6 +24,10 @@ export interface ExtractedPlace {
   isVisited?: boolean;
   /** Set when stored in a collection */
   created_at?: string;
+  /** 0–3 category tags from allowed set (set on save or edit) */
+  tags?: string[];
+  /** Optional user note */
+  note?: string | null;
 }
 
 // ── POST /clips/ingest ───────────────────────────────────────────────
@@ -68,6 +72,19 @@ export interface FavoriteItem extends ExtractedPlace {
 export interface FavoritesResponse {
   favorites: FavoriteItem[];
 }
+
+// ── Spot tags (fixed allowed set) ─────────────────────────────────────
+export const SPOT_TAGS = [
+  "cafe/bakery",
+  "food truck",
+  "coffee",
+  "bar",
+  "club",
+  "activity location",
+  "viewpoint",
+  "restaurant",
+] as const;
+export type SpotTag = (typeof SPOT_TAGS)[number];
 
 // ── Generic API error ────────────────────────────────────────────────
 export interface ApiError {

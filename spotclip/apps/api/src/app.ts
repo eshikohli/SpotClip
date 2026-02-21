@@ -13,8 +13,12 @@ import type {
   FavoritesResponse,
   FavoriteItem,
 } from "@spotclip/shared";
+import { SPOT_TAGS } from "@spotclip/shared";
 import { getMockPlaces } from "./mock";
 import { extractPlacesFromImages } from "./vision";
+import { tagPlace } from "./tagging";
+
+const ALLOWED_TAGS = new Set(SPOT_TAGS);
 
 export const app = express();
 
@@ -35,15 +39,18 @@ function isImageUpload(files: Express.Multer.File[]): boolean {
   return files.every((f) => IMAGE_MIMES.has(f.mimetype));
 }
 
-/** Normalize incoming place for storage: ensure id, isFavorite, isVisited, created_at */
+/** Normalize incoming place for storage: ensure id, isFavorite, isVisited, created_at, tags, note */
 function normalizePlace(p: ExtractedPlace): ExtractedPlace {
   const now = new Date().toISOString();
+  const tags = Array.isArray(p.tags) ? p.tags.filter((t) => ALLOWED_TAGS.has(t)).slice(0, 3) : [];
   return {
     ...p,
     id: p.id ?? uuid(),
     isFavorite: p.isFavorite ?? false,
     isVisited: p.isVisited ?? false,
     created_at: p.created_at ?? now,
+    tags,
+    note: p.note ?? null,
   };
 }
 
@@ -97,7 +104,7 @@ app.get("/collections", (_req, res) => {
 });
 
 // ── POST /collections/:id/places ─────────────────────────────────────
-app.post("/collections/:id/places", (req, res) => {
+app.post("/collections/:id/places", async (req, res) => {
   const { id } = req.params;
   const body = req.body as SavePlacesRequest;
 
@@ -108,23 +115,31 @@ app.post("/collections/:id/places", (req, res) => {
   }
 
   const existing = collections.get(id);
-
   const normalized = body.places.map(normalizePlace);
 
+  // Auto-tag each place (non-blocking: on failure use [])
+  for (const p of normalized) {
+    if (p.tags.length === 0) {
+      try {
+        p.tags = await tagPlace(p.name, p.city_guess || undefined);
+        p.tags = p.tags.filter((t) => ALLOWED_TAGS.has(t)).slice(0, 3);
+      } catch {
+        p.tags = [];
+      }
+    }
+  }
+
   if (existing) {
-    // Append places to existing collection
     existing.places = [...existing.places, ...normalized];
     if (body.name) existing.name = body.name;
     const response: SavePlacesResponse = { collection: existing };
     res.status(200).json(response);
   } else {
-    // Create new collection — name required
     if (!body.name) {
       const err: ApiError = { error: "name is required for new collections" };
       res.status(400).json(err);
       return;
     }
-
     const collection: Collection = {
       id,
       name: body.name,
@@ -140,7 +155,12 @@ app.post("/collections/:id/places", (req, res) => {
 // ── PATCH /collections/:collectionId/places/:placeId ──────────────────
 app.patch("/collections/:collectionId/places/:placeId", (req, res) => {
   const { collectionId, placeId } = req.params;
-  const body = req.body as { isFavorite?: boolean; isVisited?: boolean };
+  const body = req.body as {
+    isFavorite?: boolean;
+    isVisited?: boolean;
+    note?: string | null;
+    tags?: string[];
+  };
 
   const collection = collections.get(collectionId);
   if (!collection) {
@@ -158,6 +178,30 @@ app.patch("/collections/:collectionId/places/:placeId", (req, res) => {
 
   if (typeof body.isFavorite === "boolean") place.isFavorite = body.isFavorite;
   if (typeof body.isVisited === "boolean") place.isVisited = body.isVisited;
+
+  if (body.note !== undefined) place.note = body.note === "" ? null : body.note;
+
+  if (body.tags !== undefined) {
+    if (!Array.isArray(body.tags)) {
+      const err: ApiError = { error: "tags must be an array" };
+      res.status(400).json(err);
+      return;
+    }
+    if (body.tags.length > 3) {
+      const err: ApiError = { error: "tags: maximum 3 allowed" };
+      res.status(400).json(err);
+      return;
+    }
+    const invalid = body.tags.filter((t) => typeof t !== "string" || !ALLOWED_TAGS.has(t));
+    if (invalid.length > 0) {
+      const err: ApiError = {
+        error: "tags must be from allowed set: cafe/bakery, food truck, coffee, bar, club, activity location, viewpoint, restaurant",
+      };
+      res.status(400).json(err);
+      return;
+    }
+    place.tags = [...body.tags];
+  }
 
   res.status(200).json({ collection });
 });

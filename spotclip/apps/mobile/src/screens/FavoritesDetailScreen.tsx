@@ -10,12 +10,16 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import type { FavoriteItem } from "@spotclip/shared";
-import { getFavorites, toggleFavorite, toggleVisited, deletePlace } from "../api";
+import { getFavorites, toggleFavorite, toggleVisited, deletePlace, updatePlace } from "../api";
 import { PlaceCard } from "../PlaceCard";
+import { EditSpotModal } from "../components/EditSpotModal";
+import { NoteViewModal } from "../components/NoteViewModal";
 
 export function FavoritesDetailScreen() {
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editModalPlace, setEditModalPlace] = useState<FavoriteItem | null>(null);
+  const [noteModalPlace, setNoteModalPlace] = useState<FavoriteItem | null>(null);
 
   const refresh = useCallback(() => {
     getFavorites()
@@ -96,6 +100,31 @@ export function FavoritesDetailScreen() {
       ]);
   }, [favorites]);
 
+  const handleEditSave = useCallback(
+    async (placeId: string, payload: { note: string | null; tags: string[] }) => {
+      const item = favorites.find((f) => f.id === placeId);
+      if (!item) return;
+      const previous = { note: item.note, tags: item.tags };
+      setFavorites((prev) =>
+        prev.map((p) =>
+          p.id === placeId ? { ...p, note: payload.note, tags: payload.tags } : p,
+        ),
+      );
+      setEditModalPlace(null);
+      try {
+        await updatePlace(item.collectionId, placeId, payload);
+      } catch {
+        setFavorites((prev) =>
+          prev.map((p) =>
+            p.id === placeId ? { ...p, note: previous.note, tags: previous.tags } : p,
+          ),
+        );
+        Alert.alert("Error", "Failed to update spot");
+      }
+    },
+    [favorites],
+  );
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -137,9 +166,23 @@ export function FavoritesDetailScreen() {
             onFavorite={handleUnfavorite}
             onVisited={handleVisited}
             onDelete={handleDelete}
+            onEdit={(id) => setEditModalPlace(sorted.find((p) => p.id === id) ?? null)}
+            onViewNote={(p) => setNoteModalPlace(p as FavoriteItem)}
           />
         )}
         contentContainerStyle={styles.list}
+      />
+
+      <EditSpotModal
+        visible={editModalPlace !== null}
+        place={editModalPlace}
+        onSave={handleEditSave}
+        onCancel={() => setEditModalPlace(null)}
+      />
+      <NoteViewModal
+        visible={noteModalPlace !== null}
+        place={noteModalPlace}
+        onClose={() => setNoteModalPlace(null)}
       />
     </View>
   );

@@ -11,6 +11,8 @@ interface Props {
   onVisited?: (id: string, isVisited: boolean) => void;
   /** Optional subtitle (e.g. "From: Collection Name" for favorites list) */
   subtitle?: string;
+  /** When provided and place has a note, tapping the row opens note view */
+  onViewNote?: (place: ExtractedPlace) => void;
 }
 
 export function PlaceCard({
@@ -20,31 +22,76 @@ export function PlaceCard({
   onFavorite,
   onVisited,
   subtitle,
+  onViewNote,
 }: Props) {
   const isVisited = place.isVisited === true;
   const isFavorite = place.isFavorite === true;
   const showIconRow = onFavorite !== undefined || onVisited !== undefined;
+  const hasNote = (place.note ?? "").trim().length > 0;
+  const tags = place.tags ?? [];
+  const showNoteTap = hasNote && onViewNote !== undefined;
 
-  return (
-    <View style={[styles.card, isVisited && styles.cardVisited]}>
-      <View style={styles.info}>
-        <Text style={[styles.name, isVisited && styles.textVisited]}>{place.name}</Text>
-        {(subtitle ?? place.city_guess) ? (
-          <Text style={[styles.city, isVisited && styles.textVisited]}>
-            {subtitle ?? place.city_guess}
-          </Text>
-        ) : null}
-        {place.evidence != null && (
-          <Text style={[styles.confidence, isVisited && styles.textVisited]}>
-            {Math.round((place.confidence ?? 0) * 100)}% confidence ·{" "}
-            {place.evidence.source === "frame"
-              ? `frame #${place.evidence.index}`
-              : `audio @${(place.evidence as { timestamp_s: number }).timestamp_s}s`}
+  const InfoBlock = (
+    <View style={styles.info}>
+      <View style={styles.nameRow}>
+        <Text style={[styles.name, isVisited && styles.textVisited]} numberOfLines={1}>
+          {place.name}
+        </Text>
+        {hasNote && (
+          <Text style={styles.noteIndicator} numberOfLines={1}>
+            📝
           </Text>
         )}
       </View>
+      {(subtitle ?? place.city_guess) ? (
+        <Text style={[styles.city, isVisited && styles.textVisited]}>
+          {subtitle ?? place.city_guess}
+        </Text>
+      ) : null}
+      {tags.length > 0 && (
+        <View style={styles.tagRow}>
+          {tags.map((tag) => (
+            <View key={tag} style={styles.tagChip}>
+              <Text style={[styles.tagChipText, isVisited && styles.textVisited]}>{tag}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      {place.evidence != null && (
+        <Text style={[styles.confidence, isVisited && styles.textVisited]}>
+          {Math.round((place.confidence ?? 0) * 100)}% confidence ·{" "}
+          {place.evidence.source === "frame"
+            ? `frame #${place.evidence.index}`
+            : `audio @${(place.evidence as { timestamp_s: number }).timestamp_s}s`}
+        </Text>
+      )}
+    </View>
+  );
+
+  return (
+    <View style={[styles.card, isVisited && styles.cardVisited]}>
+      {showNoteTap ? (
+        <TouchableOpacity
+          style={styles.infoTouchable}
+          onPress={() => onViewNote(place)}
+          activeOpacity={0.7}
+        >
+          {InfoBlock}
+        </TouchableOpacity>
+      ) : (
+        InfoBlock
+      )}
       {showIconRow && (
         <View style={styles.iconRow}>
+          {onEdit !== undefined && (
+            <TouchableOpacity
+              onPress={() => onEdit(place.id)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.iconBtn}
+            >
+              <Ionicons name="pencil-outline" size={22} color="#999" />
+            </TouchableOpacity>
+          )}
           {onFavorite !== undefined && (
             <TouchableOpacity
               onPress={() => onFavorite(place.id, !isFavorite)}
@@ -119,9 +166,20 @@ const styles = StyleSheet.create({
   },
   cardVisited: { backgroundColor: "#f0f0f0", opacity: 0.85 },
   info: { flex: 1 },
-  name: { fontSize: 16, fontWeight: "600", color: "#1a1a1a" },
+  infoTouchable: { flex: 1 },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  name: { fontSize: 16, fontWeight: "600", color: "#1a1a1a", flex: 1 },
+  noteIndicator: { fontSize: 14 },
   textVisited: { color: "#888" },
   city: { fontSize: 13, color: "#666", marginTop: 2 },
+  tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
+  tagChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: "#e0e7ff",
+  },
+  tagChipText: { fontSize: 11, color: "#4338ca" },
   confidence: { fontSize: 12, color: "#999", marginTop: 4 },
   iconRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   iconBtn: { padding: 4 },

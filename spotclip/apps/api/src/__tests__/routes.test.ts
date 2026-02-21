@@ -1,7 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
 import path from "path";
 import fs from "fs";
+
+vi.mock("../tagging", () => ({ tagPlace: vi.fn().mockResolvedValue(["restaurant"]) }));
+
 import { app } from "../app";
 import type {
   IngestResponse,
@@ -97,6 +100,8 @@ describe("POST /collections/:id/places", () => {
     expect(getRes.body.places[0]).toHaveProperty("isFavorite");
     expect(getRes.body.places[0]).toHaveProperty("isVisited");
     expect(getRes.body.places[0]).toHaveProperty("created_at");
+    expect(Array.isArray(getRes.body.places[0].tags)).toBe(true);
+    expect(getRes.body.places[0]).toHaveProperty("note");
   });
 });
 
@@ -179,6 +184,80 @@ describe("PATCH /collections/:collectionId/places/:placeId", () => {
     const getRes = await request(app).get("/collections/col-patch");
     expect(getRes.body.places[0].isFavorite).toBe(true);
     expect(getRes.body.places[0].isVisited).toBe(true);
+  });
+
+  it("updates note and tags (valid)", async () => {
+    await request(app)
+      .post("/collections/col-patch-note/places")
+      .send({
+        name: "Note Test",
+        places: [
+          {
+            id: "place-note-1",
+            name: "Spot",
+            city_guess: "NYC",
+            confidence: 0.8,
+            evidence: { source: "frame", index: 0 },
+          },
+        ],
+      });
+
+    const patchRes = await request(app)
+      .patch("/collections/col-patch-note/places/place-note-1")
+      .send({ note: "Great coffee here", tags: ["coffee", "restaurant"] });
+    expect(patchRes.status).toBe(200);
+    expect(patchRes.body.collection.places[0].note).toBe("Great coffee here");
+    expect(patchRes.body.collection.places[0].tags).toEqual(["coffee", "restaurant"]);
+
+    const getRes = await request(app).get("/collections/col-patch-note");
+    expect(getRes.body.places[0].note).toBe("Great coffee here");
+    expect(getRes.body.places[0].tags).toEqual(["coffee", "restaurant"]);
+  });
+
+  it("returns 400 for invalid tags (not in allowed set)", async () => {
+    await request(app)
+      .post("/collections/col-tag-err/places")
+      .send({
+        name: "Tag Err",
+        places: [
+          {
+            id: "place-tag-1",
+            name: "Spot",
+            city_guess: "NYC",
+            confidence: 0.8,
+            evidence: { source: "frame", index: 0 },
+          },
+        ],
+      });
+
+    const res = await request(app)
+      .patch("/collections/col-tag-err/places/place-tag-1")
+      .send({ tags: ["invalid-tag"] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/allowed set|tags/i);
+  });
+
+  it("returns 400 for more than 3 tags", async () => {
+    await request(app)
+      .post("/collections/col-tag-max/places")
+      .send({
+        name: "Tag Max",
+        places: [
+          {
+            id: "place-tag-max-1",
+            name: "Spot",
+            city_guess: "NYC",
+            confidence: 0.8,
+            evidence: { source: "frame", index: 0 },
+          },
+        ],
+      });
+
+    const res = await request(app)
+      .patch("/collections/col-tag-max/places/place-tag-max-1")
+      .send({ tags: ["coffee", "restaurant", "bar", "viewpoint"] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/max|3/i);
   });
 });
 
