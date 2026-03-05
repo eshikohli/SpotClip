@@ -197,26 +197,3 @@ spotclip/
         └── assets/
 ```
 
----
-
-## Notable Implementation Details
-
-### Fixed tag set constraint
-
-The allowed tags are defined once in `packages/shared/src/index.ts` as a `const` array:
-
-```
-"cafe/bakery" | "food truck" | "coffee" | "bar" | "club" |
-"activity location" | "viewpoint" | "restaurant"
-```
-
-The tagging prompt explicitly instructs the model to choose only from this list. The `PATCH /collections/:collectionId/places/:placeId` route validates incoming tags server-side against the same constant. A maximum of 3 tags per place is enforced at both the API and UI layers.
-
-### Structured JSON responses
-
-Both the vision and tagging prompts request JSON output. The vision prompt returns an `ExtractedPlace[]` array; the tagging prompt returns a `{ tags: SpotTag[] }` object. Parsing is wrapped in try/catch so a malformed model response degrades gracefully (tagging returns `[]`; vision falls back to an empty place list).
-
-### Deterministic organization logic
-
-All collection management, favorites aggregation, visited state, tag filtering, and sorting is handled by standard TypeScript logic in Express routes and React Native screens — not by AI. This keeps behavior predictable and avoids unnecessary API calls for actions that don't require language understanding.
-
