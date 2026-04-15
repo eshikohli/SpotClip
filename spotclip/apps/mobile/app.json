@@ -12,6 +12,14 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SpotClip uses your location to show where you are on the map."
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true
     },

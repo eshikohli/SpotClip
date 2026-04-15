@@ -22,6 +22,13 @@ export function MainScreen({ navigation }: MainScreenProps) {
         >
           <Text style={styles.secondaryBtnText}>View Collections</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.primaryBtn, styles.secondaryBtn]}
+          onPress={() => navigation.navigate("Map")}
+        >
+          <Text style={styles.secondaryBtnText}>View Map</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );

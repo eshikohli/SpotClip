@@ -17,6 +17,7 @@ import { SPOT_TAGS } from "@spotclip/shared";
 import { getMockPlaces } from "./mock";
 import { extractPlacesFromImages } from "./vision";
 import { tagPlace } from "./tagging";
+import { getAddress } from "./addressing";
 
 const ALLOWED_TAGS = new Set(SPOT_TAGS);
 
@@ -51,6 +52,7 @@ function normalizePlace(p: ExtractedPlace): ExtractedPlace {
     created_at: p.created_at ?? now,
     tags,
     note: p.note ?? null,
+    address: p.address ?? null,
   };
 }
 
@@ -117,7 +119,7 @@ app.post("/collections/:id/places", async (req, res) => {
   const existing = collections.get(id);
   const normalized = body.places.map(normalizePlace);
 
-  // Auto-tag each place (non-blocking: on failure use [])
+  // Auto-tag and auto-address each place (non-blocking: on failure use defaults)
   for (const p of normalized) {
     if (p.tags.length === 0) {
       try {
@@ -125,6 +127,13 @@ app.post("/collections/:id/places", async (req, res) => {
         p.tags = p.tags.filter((t) => ALLOWED_TAGS.has(t)).slice(0, 3);
       } catch {
         p.tags = [];
+      }
+    }
+    if (!p.address) {
+      try {
+        p.address = await getAddress(p.name, p.city_guess || undefined);
+      } catch {
+        p.address = null;
       }
     }
   }

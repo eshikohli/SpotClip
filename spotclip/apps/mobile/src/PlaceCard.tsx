@@ -1,8 +1,10 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
 import type { ExtractedPlace } from "@spotclip/shared";
 import { getTagColor } from "./tagColors";
+import { useToast } from "./ToastContext";
 
 interface Props {
   place: ExtractedPlace;
@@ -28,12 +30,14 @@ export function PlaceCard({
   onViewNote,
   showExtractionMeta = true,
 }: Props) {
+  const { showToast } = useToast();
   const isVisited = place.isVisited === true;
   const isFavorite = place.isFavorite === true;
   const showIconRow = onFavorite !== undefined || onVisited !== undefined;
   const hasNote = (place.note ?? "").trim().length > 0;
   const tags = place.tags ?? [];
   const showNoteTap = hasNote && onViewNote !== undefined;
+  const hasAddress = (place.address ?? "").trim().length > 0;
 
   const InfoBlock = (
     <View style={styles.info}>
@@ -52,6 +56,26 @@ export function PlaceCard({
           {subtitle ?? place.city_guess}
         </Text>
       ) : null}
+      {hasAddress && (
+        <View style={styles.addressRow}>
+          <Text
+            style={[styles.address, isVisited && styles.textVisited]}
+            numberOfLines={2}
+          >
+            {place.address}
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              Clipboard.setStringAsync(place.address!);
+              showToast("Copied address");
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={styles.copyBtn}
+          >
+            <Ionicons name="copy-outline" size={15} color="#999" />
+          </TouchableOpacity>
+        </View>
+      )}
       {tags.length > 0 && (
         <View style={styles.tagRow}>
           {tags.map((tag) => {
@@ -165,8 +189,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 14,
     marginBottom: 10,
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: "column",
     shadowColor: "#000",
     shadowOpacity: 0.06,
     shadowRadius: 6,
@@ -181,6 +204,9 @@ const styles = StyleSheet.create({
   noteIndicator: { fontSize: 14 },
   textVisited: { color: "#888" },
   city: { fontSize: 13, color: "#666", marginTop: 2 },
+  addressRow: { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 6 },
+  address: { fontSize: 13, color: "#888", flex: 1 },
+  copyBtn: { padding: 2 },
   tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
   tagChip: {
     paddingHorizontal: 8,
@@ -189,9 +215,14 @@ const styles = StyleSheet.create({
   },
   tagChipText: { fontSize: 11 },
   confidence: { fontSize: 12, color: "#999", marginTop: 4 },
-  iconRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  iconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 12,
+  },
   iconBtn: { padding: 4 },
-  actions: { gap: 6 },
+  actions: { gap: 6, marginTop: 10 },
   btn: {
     paddingHorizontal: 14,
     paddingVertical: 8,

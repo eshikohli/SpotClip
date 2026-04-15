@@ -28,6 +28,8 @@ export interface ExtractedPlace {
   tags?: string[];
   /** Optional user note */
   note?: string | null;
+  /** Best-guess street address resolved at save time */
+  address?: string | null;
 }
 
 // ── POST /clips/ingest ───────────────────────────────────────────────

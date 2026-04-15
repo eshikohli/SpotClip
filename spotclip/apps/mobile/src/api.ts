@@ -6,10 +6,9 @@ import type {
   ExtractedPlace,
   FavoritesResponse,
 } from "@spotclip/shared";
+import { API_BASE_URL } from "./config/apiConfig";
 
-const BASE_URL = __DEV__
-  ? "http://10.136.51.162:3001"
-  : "http://10.136.51.162:3001"; // replace with production URL
+const BASE_URL = API_BASE_URL;
 
 interface MediaFile {
   uri: string;

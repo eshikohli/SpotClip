@@ -3,16 +3,19 @@ import { StatusBar } from "expo-status-bar";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "./src/navigation/types";
+import { ToastProvider } from "./src/ToastContext";
 import { MainScreen } from "./src/screens/MainScreen";
 import { UploadScreen } from "./src/screens/UploadScreen";
 import { CollectionsScreen } from "./src/screens/CollectionsScreen";
 import { CollectionDetailScreen } from "./src/screens/CollectionDetailScreen";
 import { FavoritesDetailScreen } from "./src/screens/FavoritesDetailScreen";
+import { MapScreen } from "./src/screens/MapScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App() {
   return (
+    <ToastProvider>
     <NavigationContainer>
       <Stack.Navigator
         initialRouteName="Main"
@@ -48,8 +51,14 @@ export default function App() {
           component={FavoritesDetailScreen}
           options={{ title: "Favorites" }}
         />
+        <Stack.Screen
+          name="Map"
+          component={MapScreen}
+          options={{ title: "My Map" }}
+        />
       </Stack.Navigator>
       <StatusBar style="auto" />
     </NavigationContainer>
+    </ToastProvider>
   );
 }

@@ -6,6 +6,7 @@ export type RootStackParamList = {
   Collections: undefined;
   CollectionDetail: { collectionId: string };
   Favorites: undefined;
+  Map: undefined;
 };
 
 export type MainScreenProps = NativeStackScreenProps<RootStackParamList, "Main">;
@@ -13,3 +14,4 @@ export type UploadScreenProps = NativeStackScreenProps<RootStackParamList, "Uplo
 export type CollectionsScreenProps = NativeStackScreenProps<RootStackParamList, "Collections">;
 export type CollectionDetailScreenProps = NativeStackScreenProps<RootStackParamList, "CollectionDetail">;
 export type FavoritesScreenProps = NativeStackScreenProps<RootStackParamList, "Favorites">;
+export type MapScreenProps = NativeStackScreenProps<RootStackParamList, "Map">;

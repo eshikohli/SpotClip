@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Collection {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  spots     Spot[]
+
+  @@index([createdAt, id], map: "idx_collection_created_at")
+}
+
+model Spot {
+  id       String   @id @default(cuid())
+  name     String
+  cityGuess String
+  confidence Float
+
+  evidenceSource                String
+  evidenceFrameIndex            Int?
+  evidenceAudioTimestampSeconds Int?
+
+  note       String?
+  isFavorite Boolean  @default(false)
+  isVisited  Boolean  @default(false)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  tags SpotTag[]
+
+  @@index([collectionId], map: "idx_spot_collection_id")
+  @@index([isFavorite], map: "idx_spot_is_favorite")
+}
+
+model Tag {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  spots SpotTag[]
+}
+
+model SpotTag {
+  spotId String
+  tagId  Int
+
+  spot Spot @relation(fields: [spotId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id])
+
+  @@id([spotId, tagId])
+  @@index([tagId], map: "idx_spottag_tag_id")
+}
+
