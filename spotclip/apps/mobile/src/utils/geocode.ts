@@ -53,3 +53,39 @@ export async function geocodePlace(
     return null;
   }
 }
+
+export async function geocodeCity(query: string): Promise<Coords | null> {
+  const key = `${CACHE_PREFIX}city:${query.trim().toLowerCase()}`;
+
+  try {
+    const cached = await AsyncStorage.getItem(key);
+    if (cached !== null) {
+      return JSON.parse(cached) as Coords;
+    }
+  } catch {
+    // Cache read failure is non-fatal
+  }
+
+  try {
+    const url = `${NOMINATIM_URL}?q=${encodeURIComponent(query.trim())}&format=json&limit=1`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "SpotClip/1.0 (eshi.kohli@gmail.com)" },
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+
+    const coords: Coords = {
+      latitude: parseFloat(data[0].lat),
+      longitude: parseFloat(data[0].lon),
+    };
+
+    AsyncStorage.setItem(key, JSON.stringify(coords)).catch(() => {});
+
+    return coords;
+  } catch {
+    return null;
+  }
+}

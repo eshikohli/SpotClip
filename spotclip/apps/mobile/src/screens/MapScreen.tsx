@@ -5,12 +5,13 @@ import {
   ActivityIndicator,
   StyleSheet,
   TouchableOpacity,
+  TextInput,
 } from "react-native";
 import MapView, { Marker, Callout, PROVIDER_DEFAULT } from "react-native-maps";
 import * as Location from "expo-location";
 import type { ExtractedPlace } from "@spotclip/shared";
 import { getCollections } from "../api";
-import { geocodePlace, type Coords } from "../utils/geocode";
+import { geocodePlace, geocodeCity, type Coords } from "../utils/geocode";
 
 interface PlaceWithCoords extends ExtractedPlace {
   coords: Coords;
@@ -33,6 +34,9 @@ export function MapScreen() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [progress, setProgress] = useState({ done: 0, total: 0, failed: 0 });
   const [userLocation, setUserLocation] = useState<Coords | null>(null);
+  const [searchText, setSearchText] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [notFound, setNotFound] = useState(false);
   const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
@@ -147,6 +151,24 @@ export function MapScreen() {
     );
   }
 
+  async function handleCitySearch() {
+    const query = searchText.trim();
+    if (!query || searching) return;
+    setSearching(true);
+    setNotFound(false);
+    const coords = await geocodeCity(query);
+    setSearching(false);
+    if (coords && mapRef.current) {
+      mapRef.current.animateToRegion(
+        { ...coords, latitudeDelta: 0.2, longitudeDelta: 0.2 },
+        600,
+      );
+    } else if (!coords) {
+      setNotFound(true);
+      setTimeout(() => setNotFound(false), 2500);
+    }
+  }
+
   function goToMyLocation() {
     if (userLocation && mapRef.current) {
       mapRef.current.animateToRegion(
@@ -198,6 +220,29 @@ export function MapScreen() {
         })}
       </MapView>
 
+      <View style={styles.searchBar}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search city…"
+          placeholderTextColor="#aaa"
+          value={searchText}
+          onChangeText={setSearchText}
+          returnKeyType="search"
+          onSubmitEditing={handleCitySearch}
+          autoCorrect={false}
+        />
+        <TouchableOpacity style={styles.searchBtn} onPress={handleCitySearch} disabled={searching}>
+          {searching
+            ? <ActivityIndicator size="small" color="#4f46e5" />
+            : <Text style={styles.searchBtnText}>→</Text>
+          }
+        </TouchableOpacity>
+      </View>
+
+      {notFound && (
+        <Text style={styles.notFoundText}>City not found</Text>
+      )}
+
       {userLocation && (
         <TouchableOpacity style={styles.myLocationBtn} onPress={goToMyLocation}>
           <Text style={styles.myLocationIcon}>⦿</Text>
@@ -231,6 +276,42 @@ const styles = StyleSheet.create({
   callout: { width: 200, padding: 10 },
   calloutTitle: { fontSize: 15, fontWeight: "600", color: "#1a1a1a" },
   calloutSub: { fontSize: 13, color: "#666", marginTop: 4 },
+  searchBar: {
+    position: "absolute",
+    top: 52,
+    left: 16,
+    right: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 24,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: "#1a1a1a",
+    paddingVertical: 0,
+  },
+  searchBtn: { marginLeft: 8, padding: 4 },
+  searchBtnText: { fontSize: 18, color: "#4f46e5", fontWeight: "600" },
+  notFoundText: {
+    position: "absolute",
+    top: 110,
+    alignSelf: "center",
+    backgroundColor: "rgba(200,40,40,0.85)",
+    color: "#fff",
+    fontSize: 13,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
   myLocationBtn: {
     position: "absolute",
     bottom: 80,
