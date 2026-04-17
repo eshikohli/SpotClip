@@ -8,6 +8,7 @@ import type { Collection, ExtractedPlace } from "@spotclip/shared";
 
 const DEMO_SEATTLE_ID = "demo-seattle";
 const DEMO_MANHATTAN_ID = "demo-manhattan";
+const DEMO_AUSTIN_ID = "demo-austin";
 
 function place(
   id: string,
@@ -105,6 +106,46 @@ function buildManhattanCollection(): Collection {
   };
 }
 
+function buildAustinCollection(): Collection {
+  const now = new Date().toISOString();
+  return {
+    id: DEMO_AUSTIN_ID,
+    name: "Austin",
+    created_at: now,
+    places: [
+      place("demo-austin-1", "South Congress Avenue", "Austin", ["viewpoint", "restaurant"], {
+        note: "Great shops, food trucks, and vibes. Classic Austin street.",
+        isFavorite: true,
+        isVisited: true,
+        address: "South Congress Ave, Austin, TX 78704, USA",
+      }),
+      place("demo-austin-2", "Franklin Barbecue", "Austin", ["restaurant"], {
+        note: "Worth the line. Best brisket in Texas.",
+        isFavorite: true,
+        isVisited: false,
+        address: "900 E 11th St, Austin, TX 78702, USA",
+      }),
+      place("demo-austin-3", "Barton Springs Pool", "Austin", ["activity location"], {
+        note: "Natural spring-fed pool, perfect on a hot day.",
+        isFavorite: false,
+        isVisited: true,
+        address: "2201 Barton Springs Rd, Austin, TX 78746, USA",
+      }),
+      place("demo-austin-4", "6th Street", "Austin", ["bar", "activity location"], {
+        note: "Heart of Austin's live music scene.",
+        isFavorite: false,
+        isVisited: true,
+        address: "East 6th St, Austin, TX 78701, USA",
+      }),
+      place("demo-austin-5", "Texas State Capitol", "Austin", ["viewpoint", "activity location"], {
+        isFavorite: false,
+        isVisited: false,
+        address: "1100 Congress Ave, Austin, TX 78701, USA",
+      }),
+    ],
+  };
+}
+
 /**
  * Idempotent seed: adds demo collections only if their ids are not already in the store.
  * Does not wipe or overwrite existing data; user-created collections are untouched.
@@ -115,5 +156,8 @@ export function seedDemoData(store: Map<string, Collection>): void {
   }
   if (!store.has(DEMO_MANHATTAN_ID)) {
     store.set(DEMO_MANHATTAN_ID, buildManhattanCollection());
+  }
+  if (!store.has(DEMO_AUSTIN_ID)) {
+    store.set(DEMO_AUSTIN_ID, buildAustinCollection());
   }
 }

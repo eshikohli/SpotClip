@@ -7,20 +7,13 @@ import {
   TouchableOpacity,
   TextInput,
 } from "react-native";
-import MapView, { Marker, Callout, PROVIDER_DEFAULT } from "react-native-maps";
+import MapView from "react-native-map-clustering";
+import { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import * as Location from "expo-location";
 import type { ExtractedPlace } from "@spotclip/shared";
 import { getCollections } from "../api";
 import { geocodePlace, geocodeCity, type Coords } from "../utils/geocode";
-
-interface PlaceWithCoords extends ExtractedPlace {
-  coords: Coords;
-}
-
-interface PinGroup {
-  coords: Coords;
-  places: ExtractedPlace[];
-}
+import { PlaceBottomSheet, type PlaceWithCoords } from "../components/PlaceBottomSheet";
 
 const INITIAL_REGION = {
   latitude: 48.8566,
@@ -30,13 +23,14 @@ const INITIAL_REGION = {
 };
 
 export function MapScreen() {
-  const [pinGroups, setPinGroups] = useState<PinGroup[]>([]);
+  const [places, setPlaces] = useState<PlaceWithCoords[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [progress, setProgress] = useState({ done: 0, total: 0, failed: 0 });
   const [userLocation, setUserLocation] = useState<Coords | null>(null);
   const [searchText, setSearchText] = useState("");
   const [searching, setSearching] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [selectedPlace, setSelectedPlace] = useState<PlaceWithCoords | null>(null);
   const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
@@ -57,8 +51,8 @@ export function MapScreen() {
         }
       });
 
-      // Fetch all collections and gather unique places
-      let allPlaces: ExtractedPlace[] = [];
+      // Fetch all collections and gather unique places (preserving collectionId)
+      let allPlaces: (ExtractedPlace & { collectionId: string })[] = [];
       try {
         const data = await getCollections();
         const seen = new Set<string>();
@@ -66,7 +60,7 @@ export function MapScreen() {
           for (const place of col.places) {
             if (!seen.has(place.id)) {
               seen.add(place.id);
-              allPlaces.push(place);
+              allPlaces.push({ ...place, collectionId: col.id });
             }
           }
         }
@@ -105,19 +99,7 @@ export function MapScreen() {
 
       if (cancelled) return;
 
-      // Group places that share the same coordinates into a single pin
-      const groupMap = new Map<string, PinGroup>();
-      for (const p of resolved) {
-        const key = `${p.coords.latitude.toFixed(4)},${p.coords.longitude.toFixed(4)}`;
-        const existing = groupMap.get(key);
-        if (existing) {
-          existing.places.push(p);
-        } else {
-          groupMap.set(key, { coords: p.coords, places: [p] });
-        }
-      }
-
-      setPinGroups(Array.from(groupMap.values()));
+      setPlaces(resolved);
       setStatus("ready");
     }
 
@@ -178,9 +160,20 @@ export function MapScreen() {
     }
   }
 
-  const totalShown = pinGroups.reduce((sum, g) => sum + g.places.length, 0);
-  const totalPlaces = progress.total;
-  const missing = totalPlaces - totalShown;
+  function handlePlaceUpdate(updated: ExtractedPlace) {
+    setPlaces((prev) =>
+      prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)),
+    );
+    setSelectedPlace((prev) =>
+      prev && prev.id === updated.id ? { ...prev, ...updated } : prev,
+    );
+  }
+
+  function handlePlaceDelete(placeId: string) {
+    setPlaces((prev) => prev.filter((p) => p.id !== placeId));
+  }
+
+  const missing = progress.total - places.length - progress.failed;
 
   return (
     <View style={styles.container}>
@@ -195,29 +188,18 @@ export function MapScreen() {
         }
         showsUserLocation={userLocation !== null}
         showsMyLocationButton={userLocation !== null}
+        clusterColor="#4f46e5"
+        clusterTextColor="#fff"
+        radius={40}
       >
-        {pinGroups.map((group, idx) => {
-          const isGroup = group.places.length > 1;
-          const title = isGroup
-            ? `${group.places.length} places`
-            : group.places[0].name;
-          const subtitle = isGroup
-            ? group.places.map((p) => p.name).join(", ")
-            : group.places[0].city_guess;
-
-          return (
-            <Marker key={idx} coordinate={group.coords} pinColor="#4f46e5">
-              <Callout tooltip={false}>
-                <View style={styles.callout}>
-                  <Text style={styles.calloutTitle}>{title}</Text>
-                  <Text style={styles.calloutSub} numberOfLines={3}>
-                    {subtitle}
-                  </Text>
-                </View>
-              </Callout>
-            </Marker>
-          );
-        })}
+        {places.map((place) => (
+          <Marker
+            key={place.id}
+            coordinate={place.coords}
+            pinColor="#4f46e5"
+            onPress={() => setSelectedPlace(place)}
+          />
+        ))}
       </MapView>
 
       <View style={styles.searchBar}>
@@ -252,10 +234,17 @@ export function MapScreen() {
       {missing > 0 && (
         <View style={styles.badge}>
           <Text style={styles.badgeText}>
-            {totalShown} of {totalPlaces} places shown
+            {places.length} of {progress.total} places shown
           </Text>
         </View>
       )}
+
+      <PlaceBottomSheet
+        place={selectedPlace}
+        onClose={() => setSelectedPlace(null)}
+        onUpdate={handlePlaceUpdate}
+        onDelete={handlePlaceDelete}
+      />
     </View>
   );
 }
@@ -273,9 +262,6 @@ const styles = StyleSheet.create({
   loadingText: { marginTop: 12, fontSize: 15, color: "#666" },
   errorText: { fontSize: 18, color: "#999", marginBottom: 8 },
   errorSub: { fontSize: 14, color: "#bbb", textAlign: "center" },
-  callout: { width: 200, padding: 10 },
-  calloutTitle: { fontSize: 15, fontWeight: "600", color: "#1a1a1a" },
-  calloutSub: { fontSize: 13, color: "#666", marginTop: 4 },
   searchBar: {
     position: "absolute",
     top: 52,
