@@ -6,14 +6,18 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
+  Alert,
 } from "react-native";
 import MapView from "react-native-map-clustering";
 import { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import * as Location from "expo-location";
+import { Ionicons } from "@expo/vector-icons";
 import type { ExtractedPlace } from "@spotclip/shared";
 import { getCollections } from "../api";
 import { geocodePlace, geocodeCity, type Coords } from "../utils/geocode";
 import { PlaceBottomSheet, type PlaceWithCoords } from "../components/PlaceBottomSheet";
+import { NearMeBottomSheet } from "../components/NearMeBottomSheet";
+import { getNearbySpots, type NearbyPlace } from "../utils/nearbySpots";
 
 const INITIAL_REGION = {
   latitude: 48.8566,
@@ -31,6 +35,9 @@ export function MapScreen() {
   const [searching, setSearching] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<PlaceWithCoords | null>(null);
+  const [nearMeVisible, setNearMeVisible] = useState(false);
+  const [nearMeLoading, setNearMeLoading] = useState(false);
+  const [nearbySpots, setNearbySpots] = useState<NearbyPlace[]>([]);
   const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
@@ -80,7 +87,7 @@ export function MapScreen() {
       for (const place of allPlaces) {
         if (cancelled) return;
 
-        const coords = await geocodePlace(place.name, place.city_guess);
+        const coords = await geocodePlace(place.name, place.city_guess, place.address);
 
         if (coords) {
           resolved.push({ ...place, coords });
@@ -160,6 +167,54 @@ export function MapScreen() {
     }
   }
 
+  async function handleNearMe() {
+    if (nearMeLoading) return;
+
+    setNearMeLoading(true);
+    setNearMeVisible(true);
+
+    const { status: permStatus } = await Location.requestForegroundPermissionsAsync();
+    if (permStatus !== "granted") {
+      setNearMeLoading(false);
+      setNearMeVisible(false);
+      Alert.alert("Location needed", "Enable location access to use Near Me.");
+      return;
+    }
+
+    let coords: Coords;
+    try {
+      const loc = await Location.getCurrentPositionAsync({});
+      coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+      setUserLocation(coords);
+    } catch {
+      setNearMeLoading(false);
+      setNearMeVisible(false);
+      Alert.alert("Location unavailable", "Could not get your current location.");
+      return;
+    }
+
+    const nearby = getNearbySpots(places, coords);
+    setNearbySpots(nearby);
+    setNearMeLoading(false);
+
+    if (nearby.length > 0 && mapRef.current) {
+      mapRef.current.animateToRegion(
+        { ...coords, latitudeDelta: 0.08, longitudeDelta: 0.08 },
+        500,
+      );
+    }
+  }
+
+  function handleCloseNearMe() {
+    setNearMeVisible(false);
+    setNearbySpots([]);
+  }
+
+  function handleNearbySpotPress(spot: NearbyPlace) {
+    handleCloseNearMe();
+    setSelectedPlace(spot);
+  }
+
   function handlePlaceUpdate(updated: ExtractedPlace) {
     setPlaces((prev) =>
       prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)),
@@ -174,6 +229,7 @@ export function MapScreen() {
   }
 
   const missing = progress.total - places.length - progress.failed;
+  const nearbyIds = nearMeVisible ? new Set(nearbySpots.map((s) => s.id)) : new Set<string>();
 
   return (
     <View style={styles.container}>
@@ -192,14 +248,18 @@ export function MapScreen() {
         clusterTextColor="#fff"
         radius={40}
       >
-        {places.map((place) => (
-          <Marker
-            key={place.id}
-            coordinate={place.coords}
-            pinColor="#4f46e5"
-            onPress={() => setSelectedPlace(place)}
-          />
-        ))}
+        {places.map((place) => {
+          const isNearby = nearbyIds.has(place.id);
+          return (
+            <Marker
+              key={place.id}
+              coordinate={place.coords}
+              pinColor={isNearby ? "#f97316" : "#4f46e5"}
+              zIndex={isNearby ? 1 : 0}
+              onPress={() => setSelectedPlace(place)}
+            />
+          );
+        })}
       </MapView>
 
       <View style={styles.searchBar}>
@@ -225,6 +285,22 @@ export function MapScreen() {
         <Text style={styles.notFoundText}>City not found</Text>
       )}
 
+      {!nearMeVisible && (
+        <TouchableOpacity
+          style={[styles.nearMeBtn, nearMeLoading && styles.nearMeBtnLoading]}
+          onPress={handleNearMe}
+          disabled={nearMeLoading}
+          activeOpacity={0.85}
+        >
+          {nearMeLoading ? (
+            <ActivityIndicator size="small" color="#f97316" />
+          ) : (
+            <Ionicons name="location" size={15} color="#f97316" />
+          )}
+          <Text style={styles.nearMeBtnText}>Near Me</Text>
+        </TouchableOpacity>
+      )}
+
       {userLocation && (
         <TouchableOpacity style={styles.myLocationBtn} onPress={goToMyLocation}>
           <Text style={styles.myLocationIcon}>⦿</Text>
@@ -244,6 +320,14 @@ export function MapScreen() {
         onClose={() => setSelectedPlace(null)}
         onUpdate={handlePlaceUpdate}
         onDelete={handlePlaceDelete}
+      />
+
+      <NearMeBottomSheet
+        visible={nearMeVisible}
+        loading={nearMeLoading}
+        spots={nearbySpots}
+        onClose={handleCloseNearMe}
+        onSpotPress={handleNearbySpotPress}
       />
     </View>
   );
@@ -297,6 +381,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 12,
+  },
+  nearMeBtn: {
+    position: "absolute",
+    bottom: 136,
+    right: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  nearMeBtnLoading: {
+    opacity: 0.7,
+  },
+  nearMeBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1a1a1a",
   },
   myLocationBtn: {
     position: "absolute",

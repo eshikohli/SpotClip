@@ -8,15 +8,20 @@ export interface Coords {
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 const CACHE_PREFIX = "geocache:";
 
-function cacheKey(name: string, city: string): string {
+function cacheKey(name: string, city: string, address?: string | null): string {
+  // Address-based key is more precise and avoids stale name+city misses
+  if (address?.trim()) {
+    return `${CACHE_PREFIX}addr:${address.trim().toLowerCase()}`;
+  }
   return `${CACHE_PREFIX}${name.trim().toLowerCase()}:${city.trim().toLowerCase()}`;
 }
 
 export async function geocodePlace(
   name: string,
   city: string,
+  address?: string | null,
 ): Promise<Coords | null> {
-  const key = cacheKey(name, city);
+  const key = cacheKey(name, city, address);
 
   try {
     const cached = await AsyncStorage.getItem(key);
@@ -27,9 +32,11 @@ export async function geocodePlace(
     // Cache read failure is non-fatal
   }
 
+  // Prefer address when available — much more precise than "name city"
+  const searchQuery = address?.trim() ? address.trim() : `${name} ${city}`;
+
   try {
-    const query = encodeURIComponent(`${name} ${city}`);
-    const url = `${NOMINATIM_URL}?q=${query}&format=json&limit=1`;
+    const url = `${NOMINATIM_URL}?q=${encodeURIComponent(searchQuery)}&format=json&limit=1`;
     const res = await fetch(url, {
       headers: {
         "User-Agent": "SpotClip/1.0 (eshi.kohli@gmail.com)",

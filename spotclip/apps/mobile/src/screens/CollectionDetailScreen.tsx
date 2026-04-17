@@ -10,13 +10,18 @@ import {
   ScrollView,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import * as Location from "expo-location";
 import type { Collection, ExtractedPlace } from "@spotclip/shared";
 import { getCollection, toggleFavorite, toggleVisited, deletePlace, updatePlace } from "../api";
 import { PlaceCard } from "../PlaceCard";
 import { EditSpotModal } from "../components/EditSpotModal";
 import { NoteViewModal } from "../components/NoteViewModal";
 import { getTagColor } from "../tagColors";
+import { geocodePlace, type Coords } from "../utils/geocode";
+import { getDistance } from "../utils/nearbySpots";
 import type { CollectionDetailScreenProps } from "../navigation/types";
+
+const NEAR_ME_RADIUS_MILES = 5;
 
 export function CollectionDetailScreen({ route, navigation }: CollectionDetailScreenProps) {
   const { collectionId } = route.params;
@@ -25,6 +30,13 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
   const [editModalPlace, setEditModalPlace] = useState<ExtractedPlace | null>(null);
   const [noteModalPlace, setNoteModalPlace] = useState<ExtractedPlace | null>(null);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+
+  // Near Me state
+  const [nearMode, setNearMode] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationDenied, setLocationDenied] = useState(false);
+  const [userLocation, setUserLocation] = useState<Coords | null>(null);
+  const [nearMeDistances, setNearMeDistances] = useState<Map<string, number>>(new Map());
 
   useFocusEffect(
     useCallback(() => {
@@ -67,13 +79,74 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
   }, [collection]);
 
   const filteredPlaces = useMemo(() => {
-    if (!selectedTag) return sortedPlaces;
-    return sortedPlaces.filter((p) => (p.tags ?? []).includes(selectedTag));
-  }, [sortedPlaces, selectedTag]);
+    let result = selectedTag
+      ? sortedPlaces.filter((p) => (p.tags ?? []).includes(selectedTag))
+      : sortedPlaces;
+
+    if (nearMode) {
+      result = result
+        .filter((p) => {
+          const d = nearMeDistances.get(p.id);
+          return d !== undefined && d <= NEAR_ME_RADIUS_MILES;
+        })
+        .sort((a, b) => (nearMeDistances.get(a.id) ?? 0) - (nearMeDistances.get(b.id) ?? 0));
+    }
+
+    return result;
+  }, [sortedPlaces, selectedTag, nearMode, nearMeDistances]);
 
   const handleTagPress = useCallback((tag: string | null) => {
     setSelectedTag((prev) => (prev === tag ? null : tag));
   }, []);
+
+  async function handleNearMeToggle() {
+    if (nearMode) {
+      setNearMode(false);
+      return;
+    }
+
+    setLocationLoading(true);
+    setLocationDenied(false);
+
+    let loc = userLocation;
+    if (!loc) {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setLocationDenied(true);
+        setLocationLoading(false);
+        return;
+      }
+      try {
+        const position = await Location.getCurrentPositionAsync({});
+        loc = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+        setUserLocation(loc);
+      } catch {
+        setLocationLoading(false);
+        Alert.alert("Location unavailable", "Could not get your current location.");
+        return;
+      }
+    }
+
+    // Geocode all places in parallel (uses address when available for precision)
+    const places = collection?.places ?? [];
+    const geocoded = await Promise.all(
+      places.map(async (p) => ({
+        id: p.id,
+        coords: await geocodePlace(p.name, p.city_guess, p.address),
+      })),
+    );
+
+    const distances = new Map<string, number>();
+    for (const { id, coords } of geocoded) {
+      if (coords && loc) {
+        distances.set(id, getDistance(loc.latitude, loc.longitude, coords.latitude, coords.longitude));
+      }
+    }
+
+    setNearMeDistances(distances);
+    setNearMode(true);
+    setLocationLoading(false);
+  }
 
   const handleFavorite = useCallback(
     async (placeId: string, isFavorite: boolean) => {
@@ -82,27 +155,13 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
       if (!prev) return;
       const previous = prev.isFavorite;
       setCollection((c) =>
-        c
-          ? {
-              ...c,
-              places: c.places.map((p) =>
-                p.id === placeId ? { ...p, isFavorite } : p,
-              ),
-            }
-          : null,
+        c ? { ...c, places: c.places.map((p) => p.id === placeId ? { ...p, isFavorite } : p) } : null,
       );
       try {
         await toggleFavorite(collectionId, placeId, isFavorite);
       } catch {
         setCollection((c) =>
-          c
-            ? {
-                ...c,
-                places: c.places.map((p) =>
-                  p.id === placeId ? { ...p, isFavorite: previous } : p,
-                ),
-              }
-            : null,
+          c ? { ...c, places: c.places.map((p) => p.id === placeId ? { ...p, isFavorite: previous } : p) } : null,
         );
         Alert.alert("Error", "Failed to update favorite");
       }
@@ -117,27 +176,13 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
       if (!prev) return;
       const previous = prev.isVisited;
       setCollection((c) =>
-        c
-          ? {
-              ...c,
-              places: c.places.map((p) =>
-                p.id === placeId ? { ...p, isVisited } : p,
-              ),
-            }
-          : null,
+        c ? { ...c, places: c.places.map((p) => p.id === placeId ? { ...p, isVisited } : p) } : null,
       );
       try {
         await toggleVisited(collectionId, placeId, isVisited);
       } catch {
         setCollection((c) =>
-          c
-            ? {
-                ...c,
-                places: c.places.map((p) =>
-                  p.id === placeId ? { ...p, isVisited: previous } : p,
-                ),
-              }
-            : null,
+          c ? { ...c, places: c.places.map((p) => p.id === placeId ? { ...p, isVisited: previous } : p) } : null,
         );
         Alert.alert("Error", "Failed to update visited");
       }
@@ -186,9 +231,7 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
           ? {
               ...c,
               places: c.places.map((p) =>
-                p.id === placeId
-                  ? { ...p, note: payload.note, tags: payload.tags }
-                  : p,
+                p.id === placeId ? { ...p, note: payload.note, tags: payload.tags } : p,
               ),
             }
           : null,
@@ -230,39 +273,68 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
   }
 
   const tagFilterHeader = (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.tagFilterScroll}
-      contentContainerStyle={styles.tagFilterContent}
-    >
-      <TouchableOpacity
-        style={[styles.tagChipAll, selectedTag === null && styles.tagChipAllSelected]}
-        onPress={() => handleTagPress(null)}
+    <>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tagFilterScroll}
+        contentContainerStyle={styles.tagFilterContent}
       >
-        <Text style={[styles.tagChipText, selectedTag === null && styles.tagChipTextSelected]}>
-          All
-        </Text>
-      </TouchableOpacity>
-      {availableTags.map((tag) => {
-        const selected = selectedTag === tag;
-        const { backgroundColor, color } = getTagColor(tag);
-        return (
-          <TouchableOpacity
-            key={tag}
-            style={[
-              styles.tagChipFilter,
-              { backgroundColor },
-              selected && { borderWidth: 2, borderColor: color },
-            ]}
-            onPress={() => handleTagPress(tag)}
-          >
-            <Text style={[styles.tagChipText, { color }]}>{tag}</Text>
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
+        {/* All (tags) */}
+        <TouchableOpacity
+          style={[styles.tagChipAll, selectedTag === null && !nearMode && styles.tagChipAllSelected]}
+          onPress={() => { handleTagPress(null); setNearMode(false); }}
+        >
+          <Text style={[styles.tagChipText, selectedTag === null && !nearMode && styles.tagChipTextSelected]}>
+            All
+          </Text>
+        </TouchableOpacity>
+
+        {/* Near Me */}
+        <TouchableOpacity
+          style={[styles.tagChipNearMe, nearMode && styles.tagChipNearMeActive]}
+          onPress={handleNearMeToggle}
+          disabled={locationLoading}
+        >
+          {locationLoading && (
+            <ActivityIndicator size="small" color={nearMode ? "#fff" : "#f97316"} style={styles.nearMeSpinner} />
+          )}
+          <Text style={[styles.tagChipText, styles.tagChipNearMeText, nearMode && styles.tagChipNearMeActiveText]}>
+            {locationLoading ? "Locating…" : "Near Me"}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Tag pills */}
+        {availableTags.map((tag) => {
+          const selected = selectedTag === tag;
+          const { backgroundColor, color } = getTagColor(tag);
+          return (
+            <TouchableOpacity
+              key={tag}
+              style={[
+                styles.tagChipFilter,
+                { backgroundColor },
+                selected && { borderWidth: 2, borderColor: color },
+              ]}
+              onPress={() => handleTagPress(tag)}
+            >
+              <Text style={[styles.tagChipText, { color }]}>{tag}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      {locationDenied && (
+        <Text style={styles.locationDeniedText}>Enable location to use Near Me</Text>
+      )}
+    </>
   );
+
+  const emptyText = nearMode && !locationDenied
+    ? "No saved spots within 5 miles"
+    : selectedTag
+    ? `No spots with tag "${selectedTag}".`
+    : "No places in this collection yet.";
 
   return (
     <View style={styles.container}>
@@ -271,24 +343,26 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
         data={filteredPlaces}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={tagFilterHeader}
-        renderItem={({ item }) => (
-          <PlaceCard
-            place={item}
-            onFavorite={handleFavorite}
-            onVisited={handleVisited}
-            onDelete={handleDelete}
-            onEdit={(id) => setEditModalPlace(filteredPlaces.find((p) => p.id === id) ?? null)}
-            onViewNote={(p) => setNoteModalPlace(p)}
-            showExtractionMeta={false}
-          />
-        )}
+        renderItem={({ item }) => {
+          const dist = nearMode ? nearMeDistances.get(item.id) : undefined;
+          const subtitle =
+            dist !== undefined ? `${item.city_guess} • ${dist.toFixed(1)} mi` : undefined;
+          return (
+            <PlaceCard
+              place={item}
+              subtitle={subtitle}
+              onFavorite={handleFavorite}
+              onVisited={handleVisited}
+              onDelete={handleDelete}
+              onEdit={(id) => setEditModalPlace(filteredPlaces.find((p) => p.id === id) ?? null)}
+              onViewNote={(p) => setNoteModalPlace(p)}
+              showExtractionMeta={false}
+            />
+          );
+        }}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
-          <Text style={styles.emptyText}>
-            {selectedTag
-              ? `No spots with tag "${selectedTag}".`
-              : "No places in this collection yet."}
-          </Text>
+          <Text style={styles.emptyText}>{emptyText}</Text>
         }
       />
       <TouchableOpacity
@@ -317,7 +391,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fafafa" },
   center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fafafa" },
   errorText: { fontSize: 16, color: "#c33" },
-  tagFilterScroll: { marginBottom: 10 },
+  tagFilterScroll: { marginBottom: 4 },
   tagFilterContent: {
     paddingHorizontal: 20,
     paddingVertical: 4,
@@ -333,6 +407,19 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   tagChipAllSelected: { backgroundColor: "#4f46e5" },
+  tagChipNearMe: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 18,
+    backgroundColor: "#fff5ed",
+    marginRight: 8,
+  },
+  tagChipNearMeActive: { backgroundColor: "#f97316" },
+  tagChipNearMeText: { color: "#f97316" },
+  tagChipNearMeActiveText: { color: "#fff" },
+  nearMeSpinner: { marginRight: 4 },
   tagChipFilter: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -341,6 +428,12 @@ const styles = StyleSheet.create({
   },
   tagChipText: { fontSize: 15, lineHeight: 18, color: "#555", fontWeight: "500" },
   tagChipTextSelected: { color: "#fff", fontWeight: "600" },
+  locationDeniedText: {
+    marginHorizontal: 20,
+    marginBottom: 8,
+    fontSize: 13,
+    color: "#f97316",
+  },
   list: { paddingTop: 8, paddingHorizontal: 20, paddingBottom: 20 },
   emptyText: { textAlign: "center", color: "#999", marginTop: 40 },
   primaryBtn: {
