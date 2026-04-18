@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   FlatList,
   Alert,
@@ -12,6 +13,7 @@ import {
   Image,
   ScrollView,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import type { ExtractedPlace } from "@spotclip/shared";
 import { ingestClip } from "../api";
@@ -120,6 +122,13 @@ export function UploadScreen({ navigation }: UploadScreenProps) {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      <View style={styles.modalHeader}>
+        <Text style={styles.modalTitle}>Add a Spot</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
+          <Ionicons name="close" size={24} color="#666" />
+        </TouchableOpacity>
+      </View>
+
       {step === "input" && (
         <View style={styles.section}>
           <Text style={styles.label}>Media</Text>
@@ -248,6 +257,14 @@ export function UploadScreen({ navigation }: UploadScreenProps) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fafafa", padding: 20 },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  },
+  modalTitle: { fontSize: 20, fontWeight: "700", color: "#1a1a1a" },
+  closeBtn: { padding: 4 },
   section: { flex: 1 },
   label: { fontSize: 14, fontWeight: "600", color: "#444", marginBottom: 6 },
   input: {

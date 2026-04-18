@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useFocusEffect } from "@react-navigation/native";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -27,7 +26,11 @@ const INITIAL_REGION = {
   longitudeDelta: 10,
 };
 
-export function MapScreen() {
+interface Props {
+  isActive: boolean;
+}
+
+export function MapScreen({ isActive }: Props) {
   const [places, setPlaces] = useState<PlaceWithCoords[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [progress, setProgress] = useState({ done: 0, total: 0, failed: 0 });
@@ -62,91 +65,90 @@ export function MapScreen() {
     });
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      let cancelled = false;
+  useEffect(() => {
+    if (!isActive) return;
+    let cancelled = false;
 
-      async function load() {
-        // Fetch all collections and gather unique places (preserving collectionId)
-        let allPlaces: (ExtractedPlace & { collectionId: string })[] = [];
-        try {
-          const data = await getCollections();
-          const seen = new Set<string>();
-          for (const col of data.collections) {
-            for (const place of col.places) {
-              if (!seen.has(place.id)) {
-                seen.add(place.id);
-                allPlaces.push({ ...place, collectionId: col.id });
-              }
+    async function load() {
+      // Fetch all collections and gather unique places (preserving collectionId)
+      let allPlaces: (ExtractedPlace & { collectionId: string })[] = [];
+      try {
+        const data = await getCollections();
+        const seen = new Set<string>();
+        for (const col of data.collections) {
+          for (const place of col.places) {
+            if (!seen.has(place.id)) {
+              seen.add(place.id);
+              allPlaces.push({ ...place, collectionId: col.id });
             }
           }
-        } catch {
-          if (!cancelled && !initialLoadDone.current) setStatus("error");
-          return;
         }
+      } catch {
+        if (!cancelled && !initialLoadDone.current) setStatus("error");
+        return;
+      }
 
-        if (cancelled) return;
+      if (cancelled) return;
 
-        // Only geocode places we haven't processed yet
-        const newPlaces = allPlaces.filter((p) => !geocodedIds.current.has(p.id));
+      // Only geocode places we haven't processed yet
+      const newPlaces = allPlaces.filter((p) => !geocodedIds.current.has(p.id));
 
-        if (newPlaces.length === 0) {
-          if (!initialLoadDone.current) {
-            setStatus("ready");
-            initialLoadDone.current = true;
-          }
-          return;
-        }
-
-        if (!initialLoadDone.current) {
-          setProgress({ done: 0, total: newPlaces.length, failed: 0 });
-        }
-
-        // Geocode sequentially to respect Nominatim's rate limit
-        const resolved: PlaceWithCoords[] = [];
-        let failed = 0;
-
-        for (const place of newPlaces) {
-          if (cancelled) return;
-
-          const coords = await geocodePlace(place.name, place.city_guess, place.address);
-          geocodedIds.current.add(place.id);
-
-          if (coords) {
-            resolved.push({ ...place, coords });
-          } else {
-            failed++;
-          }
-
-          if (!cancelled && !initialLoadDone.current) {
-            setProgress((p) => ({ ...p, done: p.done + 1, failed }));
-          }
-
-          // Polite delay for Nominatim (cached results return instantly, so this
-          // only adds noticeable delay for fresh network requests)
-          await new Promise((r) => setTimeout(r, 250));
-        }
-
-        if (cancelled) return;
-
-        setPlaces((prev) => {
-          const existingIds = new Set(prev.map((p) => p.id));
-          const brandNew = resolved.filter((p) => !existingIds.has(p.id));
-          return brandNew.length > 0 ? [...prev, ...brandNew] : prev;
-        });
-
+      if (newPlaces.length === 0) {
         if (!initialLoadDone.current) {
           setStatus("ready");
           initialLoadDone.current = true;
         }
+        return;
       }
 
-      load();
+      if (!initialLoadDone.current) {
+        setProgress({ done: 0, total: newPlaces.length, failed: 0 });
+      }
+
+      // Geocode sequentially to respect Nominatim's rate limit
+      const resolved: PlaceWithCoords[] = [];
+      let failed = 0;
+
+      for (const place of newPlaces) {
+        if (cancelled) return;
+
+        const coords = await geocodePlace(place.name, place.city_guess, place.address);
+        geocodedIds.current.add(place.id);
+
+        if (coords) {
+          resolved.push({ ...place, coords });
+        } else {
+          failed++;
+        }
+
+        if (!cancelled && !initialLoadDone.current) {
+          setProgress((p) => ({ ...p, done: p.done + 1, failed }));
+        }
+
+        // Polite delay for Nominatim (cached results return instantly, so this
+        // only adds noticeable delay for fresh network requests)
+        await new Promise((r) => setTimeout(r, 250));
+      }
+
+      if (cancelled) return;
+
+      setPlaces((prev) => {
+        const existingIds = new Set(prev.map((p) => p.id));
+        const brandNew = resolved.filter((p) => !existingIds.has(p.id));
+        return brandNew.length > 0 ? [...prev, ...brandNew] : prev;
+      });
+
+      if (!initialLoadDone.current) {
+        setStatus("ready");
+        initialLoadDone.current = true;
+      }
+    }
+
+    load();
       return () => {
         cancelled = true;
       };
-    }, []),
-  );
+  }, [isActive]);
 
   if (status === "loading") {
     const pct =
@@ -379,7 +381,7 @@ const styles = StyleSheet.create({
   errorSub: { fontSize: 14, color: "#bbb", textAlign: "center" },
   searchBar: {
     position: "absolute",
-    top: 52,
+    top: 68,
     left: 16,
     right: 16,
     flexDirection: "row",
@@ -404,7 +406,7 @@ const styles = StyleSheet.create({
   searchBtnText: { fontSize: 18, color: "#4f46e5", fontWeight: "600" },
   notFoundText: {
     position: "absolute",
-    top: 110,
+    top: 126,
     alignSelf: "center",
     backgroundColor: "rgba(200,40,40,0.85)",
     color: "#fff",
@@ -415,7 +417,7 @@ const styles = StyleSheet.create({
   },
   nearMeBtn: {
     position: "absolute",
-    bottom: 136,
+    bottom: 220,
     right: 16,
     flexDirection: "row",
     alignItems: "center",
@@ -440,7 +442,7 @@ const styles = StyleSheet.create({
   },
   myLocationBtn: {
     position: "absolute",
-    bottom: 80,
+    bottom: 164,
     right: 16,
     width: 44,
     height: 44,
@@ -461,7 +463,7 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: "absolute",
-    bottom: 20,
+    bottom: 164,
     alignSelf: "center",
     backgroundColor: "rgba(0,0,0,0.6)",
     borderRadius: 20,

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,10 +9,15 @@ import {
   Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
 import type { Collection } from "@spotclip/shared";
 import { getCollections, getFavorites } from "../api";
-import type { CollectionsScreenProps } from "../navigation/types";
+
+interface Props {
+  reloadTrigger: number;
+  onUpload: () => void;
+  onOpenCollection: (id: string) => void;
+  onOpenFavorites: () => void;
+}
 
 const PASTEL_COLORS = [
   "#fde68a", "#a7f3d0", "#bfdbfe", "#c4b5fd",
@@ -22,34 +27,32 @@ const PASTEL_COLORS = [
 const COLUMN_GAP = 12;
 const CARD_WIDTH = (Dimensions.get("window").width - 20 * 2 - COLUMN_GAP) / 2;
 
-export function CollectionsScreen({ navigation }: CollectionsScreenProps) {
+export function CollectionsScreen({ reloadTrigger, onUpload, onOpenCollection, onOpenFavorites }: Props) {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [favoritesCount, setFavoritesCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      setLoading(true);
-      Promise.all([getCollections(), getFavorites()])
-        .then(([colData, favData]) => {
-          if (active) {
-            setCollections(colData.collections);
-            setFavoritesCount(favData.favorites.length);
-          }
-        })
-        .catch(() => {
-          if (active) {
-            setCollections([]);
-            setFavoritesCount(0);
-          }
-        })
-        .finally(() => {
-          if (active) setLoading(false);
-        });
-      return () => { active = false; };
-    }, []),
-  );
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    Promise.all([getCollections(), getFavorites()])
+      .then(([colData, favData]) => {
+        if (active) {
+          setCollections(colData.collections);
+          setFavoritesCount(favData.favorites.length);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setCollections([]);
+          setFavoritesCount(0);
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [reloadTrigger]);
 
   if (loading) {
     return (
@@ -66,7 +69,7 @@ export function CollectionsScreen({ navigation }: CollectionsScreenProps) {
         <Text style={styles.emptyText}>No collections yet</Text>
         <TouchableOpacity
           style={styles.primaryBtn}
-          onPress={() => navigation.navigate("Upload")}
+          onPress={onUpload}
         >
           <Text style={styles.primaryBtnText}>Upload Your First Spot</Text>
         </TouchableOpacity>
@@ -78,7 +81,7 @@ export function CollectionsScreen({ navigation }: CollectionsScreenProps) {
     favoritesCount > 0 ? (
       <TouchableOpacity
         style={styles.favoritesCard}
-        onPress={() => navigation.navigate("Favorites")}
+        onPress={onOpenFavorites}
         activeOpacity={0.8}
       >
         <Ionicons name="heart" size={28} color="#e11" />
@@ -103,7 +106,7 @@ export function CollectionsScreen({ navigation }: CollectionsScreenProps) {
       renderItem={({ item, index }) => (
         <TouchableOpacity
           style={[styles.card, { backgroundColor: PASTEL_COLORS[index % PASTEL_COLORS.length] }]}
-          onPress={() => navigation.navigate("CollectionDetail", { collectionId: item.id })}
+          onPress={() => onOpenCollection(item.id)}
         >
           <Text style={styles.cardName} numberOfLines={2}>{item.name}</Text>
           <Text style={styles.cardCount}>
@@ -118,7 +121,7 @@ export function CollectionsScreen({ navigation }: CollectionsScreenProps) {
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: "#fafafa" },
   emptyText: { fontSize: 18, color: "#999", marginBottom: 16 },
-  grid: { padding: 20 },
+  grid: { padding: 20, paddingBottom: 160 },
   favoritesCard: {
     flexDirection: "row",
     alignItems: "center",
