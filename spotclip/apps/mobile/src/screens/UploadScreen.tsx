@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import * as Crypto from "expo-crypto";
 import type { ExtractedPlace } from "@spotclip/shared";
 import { ingestClip } from "../api";
 import { PlaceCard } from "../PlaceCard";
@@ -38,6 +39,11 @@ export function UploadScreen({ navigation }: UploadScreenProps) {
   const [editName, setEditName] = useState("");
   const [showPicker, setShowPicker] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [manualMode, setManualMode] = useState(false);
+  const [manualName, setManualName] = useState("");
+  const [manualCity, setManualCity] = useState("");
+  const [manualAddress, setManualAddress] = useState("");
+  const [manualNote, setManualNote] = useState("");
 
   // ── Pick images ──────────────────────────────────────────────────
   async function pickImages() {
@@ -102,11 +108,35 @@ export function UploadScreen({ navigation }: UploadScreenProps) {
     setEditName("");
   }
 
+  // ── Manual entry ─────────────────────────────────────────────────
+  function handleManualSubmit() {
+    if (!manualName.trim() || !manualCity.trim()) {
+      Alert.alert("Required", "Place name and city are required.");
+      return;
+    }
+    const place: ExtractedPlace = {
+      id: Crypto.randomUUID(),
+      name: manualName.trim(),
+      city_guess: manualCity.trim(),
+      address: manualAddress.trim() || null,
+      note: manualNote.trim() || null,
+      confidence: 1,
+      evidence: { source: "frame", index: 0 },
+    };
+    setPlaces([place]);
+    setStep("review");
+  }
+
   // ── Reset ────────────────────────────────────────────────────────
   function handleReset() {
     setStep("input");
     setMediaFiles([]);
     setPlaces([]);
+    setManualMode(false);
+    setManualName("");
+    setManualCity("");
+    setManualAddress("");
+    setManualNote("");
   }
 
   // ── On saved from modals ─────────────────────────────────────────
@@ -130,7 +160,7 @@ export function UploadScreen({ navigation }: UploadScreenProps) {
       </View>
 
       {step === "input" && (
-        <View style={styles.section}>
+        <ScrollView style={styles.section} keyboardShouldPersistTaps="handled">
           <Text style={styles.label}>Media</Text>
           <View style={styles.mediaButtons}>
             <TouchableOpacity style={styles.mediaPick} onPress={pickImages}>
@@ -167,7 +197,70 @@ export function UploadScreen({ navigation }: UploadScreenProps) {
           <TouchableOpacity style={styles.primaryBtn} onPress={handleSubmit}>
             <Text style={styles.primaryBtnText}>Extract Places</Text>
           </TouchableOpacity>
-        </View>
+
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <TouchableOpacity
+            style={styles.manualToggleBtn}
+            onPress={() => setManualMode((v) => !v)}
+          >
+            <Text style={styles.manualToggleText}>
+              {manualMode ? "Hide Manual Entry" : "Add Manually"}
+            </Text>
+          </TouchableOpacity>
+
+          {manualMode && (
+            <View style={styles.manualForm}>
+              <Text style={styles.label}>Place Name *</Text>
+              <TextInput
+                style={styles.input}
+                value={manualName}
+                onChangeText={setManualName}
+                placeholder="e.g. Blue Bottle Coffee"
+                placeholderTextColor="#aaa"
+              />
+              <Text style={[styles.label, { marginTop: 12 }]}>City *</Text>
+              <TextInput
+                style={styles.input}
+                value={manualCity}
+                onChangeText={setManualCity}
+                placeholder="e.g. San Francisco, CA"
+                placeholderTextColor="#aaa"
+              />
+              <Text style={[styles.label, { marginTop: 12 }]}>Address</Text>
+              <TextInput
+                style={styles.input}
+                value={manualAddress}
+                onChangeText={setManualAddress}
+                placeholder="e.g. 315 Linden St"
+                placeholderTextColor="#aaa"
+              />
+              <Text style={[styles.label, { marginTop: 12 }]}>Notes</Text>
+              <TextInput
+                style={[styles.input, styles.notesInput]}
+                value={manualNote}
+                onChangeText={setManualNote}
+                placeholder="Anything you want to remember…"
+                placeholderTextColor="#aaa"
+                multiline
+              />
+              <TouchableOpacity
+                style={[
+                  styles.primaryBtn,
+                  (!manualName.trim() || !manualCity.trim()) && styles.primaryBtnDisabled,
+                ]}
+                onPress={handleManualSubmit}
+                disabled={!manualName.trim() || !manualCity.trim()}
+              >
+                <Text style={styles.primaryBtnText}>Add Spot</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
       )}
 
       {step === "loading" && (
@@ -324,4 +417,18 @@ const styles = StyleSheet.create({
   actionBtnOutline: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#4f46e5" },
   actionBtnOutlineText: { color: "#4f46e5", fontSize: 16, fontWeight: "600" },
   startOverText: { textAlign: "center", color: "#999", fontSize: 15, paddingVertical: 8 },
+  dividerRow: { flexDirection: "row", alignItems: "center", marginVertical: 16, gap: 10 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: "#e0e0e0" },
+  dividerText: { fontSize: 13, color: "#aaa", fontWeight: "500" },
+  manualToggleBtn: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#4f46e5",
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  manualToggleText: { color: "#4f46e5", fontSize: 15, fontWeight: "600" },
+  manualForm: { marginTop: 16 },
+  notesInput: { minHeight: 80, textAlignVertical: "top" },
+  primaryBtnDisabled: { backgroundColor: "#a5b4fc" },
 });
