@@ -61,14 +61,6 @@ app.post(
   "/clips/ingest",
   upload.array("media", 10),
   async (req, res) => {
-    const tiktokUrl = req.body?.tiktok_url;
-
-    if (!tiktokUrl || typeof tiktokUrl !== "string") {
-      const err: ApiError = { error: "tiktok_url is required" };
-      res.status(400).json(err);
-      return;
-    }
-
     const files = req.files as Express.Multer.File[] | undefined;
     if (!files || files.length === 0) {
       const err: ApiError = { error: "At least one media file is required" };

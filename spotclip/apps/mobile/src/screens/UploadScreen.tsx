@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   FlatList,
   Alert,
@@ -31,7 +30,6 @@ interface MediaFile {
 
 export function UploadScreen({ navigation }: UploadScreenProps) {
   const [step, setStep] = useState<Step>("input");
-  const [tiktokUrl, setTiktokUrl] = useState("");
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [places, setPlaces] = useState<ExtractedPlace[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -62,32 +60,8 @@ export function UploadScreen({ navigation }: UploadScreenProps) {
     setMediaFiles((prev) => prev.filter((_, i) => i !== index));
   }
 
-  // ── Pick video ───────────────────────────────────────────────────
-  async function pickVideo() {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["videos"],
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      const a = result.assets[0];
-      setMediaFiles((prev) => [
-        ...prev,
-        {
-          uri: a.uri,
-          name: a.fileName ?? `video-${Date.now()}.mp4`,
-          type: a.mimeType ?? "video/mp4",
-        },
-      ]);
-    }
-  }
-
   // ── Submit ───────────────────────────────────────────────────────
   async function handleSubmit() {
-    if (!tiktokUrl.trim()) {
-      Alert.alert("Error", "Please enter a TikTok URL");
-      return;
-    }
     if (mediaFiles.length === 0) {
       Alert.alert("Error", "Please attach at least one media file");
       return;
@@ -95,7 +69,7 @@ export function UploadScreen({ navigation }: UploadScreenProps) {
 
     setStep("loading");
     try {
-      const response = await ingestClip(tiktokUrl, mediaFiles);
+      const response = await ingestClip(mediaFiles);
       setPlaces(response.places);
       setStep("review");
     } catch (e) {
@@ -129,7 +103,6 @@ export function UploadScreen({ navigation }: UploadScreenProps) {
   // ── Reset ────────────────────────────────────────────────────────
   function handleReset() {
     setStep("input");
-    setTiktokUrl("");
     setMediaFiles([]);
     setPlaces([]);
   }
@@ -149,24 +122,10 @@ export function UploadScreen({ navigation }: UploadScreenProps) {
     >
       {step === "input" && (
         <View style={styles.section}>
-          <Text style={styles.label}>TikTok URL</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="https://tiktok.com/@user/video/..."
-            placeholderTextColor="#aaa"
-            value={tiktokUrl}
-            onChangeText={setTiktokUrl}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-
-          <Text style={[styles.label, { marginTop: 16 }]}>Media</Text>
+          <Text style={styles.label}>Media</Text>
           <View style={styles.mediaButtons}>
             <TouchableOpacity style={styles.mediaPick} onPress={pickImages}>
               <Text style={styles.mediaPickText}>+ Images</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.mediaPick} onPress={pickVideo}>
-              <Text style={styles.mediaPickText}>+ Video</Text>
             </TouchableOpacity>
           </View>
           {mediaFiles.length > 0 && (
@@ -178,17 +137,11 @@ export function UploadScreen({ navigation }: UploadScreenProps) {
               >
                 {mediaFiles.map((file, index) => (
                   <View key={`${file.uri}-${index}`} style={styles.thumbnailWrap}>
-                    {file.type.startsWith("image/") ? (
-                      <Image
-                        source={{ uri: file.uri }}
-                        style={styles.thumbnail}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={styles.thumbnailPlaceholder}>
-                        <Text style={styles.thumbnailPlaceholderText}>Video</Text>
-                      </View>
-                    )}
+                    <Image
+                      source={{ uri: file.uri }}
+                      style={styles.thumbnail}
+                      resizeMode="cover"
+                    />
                     <TouchableOpacity
                       style={styles.thumbnailRemove}
                       onPress={() => removeMediaFile(index)}
@@ -322,15 +275,6 @@ const styles = StyleSheet.create({
   thumbnailsContent: { flexDirection: "row", gap: 10, paddingVertical: 4 },
   thumbnailWrap: { width: 72, height: 72, position: "relative" },
   thumbnail: { width: 72, height: 72, borderRadius: 8 },
-  thumbnailPlaceholder: {
-    width: 72,
-    height: 72,
-    borderRadius: 8,
-    backgroundColor: "#e5e7eb",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  thumbnailPlaceholderText: { fontSize: 11, color: "#6b7280", fontWeight: "600" },
   thumbnailRemove: {
     position: "absolute",
     top: 4,

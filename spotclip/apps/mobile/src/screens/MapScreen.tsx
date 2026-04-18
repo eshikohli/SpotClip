@@ -9,7 +9,7 @@ import {
   TextInput,
   Alert,
 } from "react-native";
-import MapView from "react-native-map-clustering";
+import MapView from "react-native-maps";
 import { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
@@ -278,9 +278,6 @@ export function MapScreen() {
         }
         showsUserLocation={userLocation !== null}
         showsMyLocationButton={userLocation !== null}
-        clusterColor="#4f46e5"
-        clusterTextColor="#fff"
-        radius={40}
       >
         {places.map((place) => {
           const isNearby = nearbyIds.has(place.id);

@@ -17,11 +17,9 @@ interface MediaFile {
 }
 
 export async function ingestClip(
-  tiktokUrl: string,
   mediaFiles: MediaFile[],
 ): Promise<IngestResponse> {
   const form = new FormData();
-  form.append("tiktok_url", tiktokUrl);
 
   for (const file of mediaFiles) {
     form.append("media", {
