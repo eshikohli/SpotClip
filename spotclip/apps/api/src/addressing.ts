@@ -12,7 +12,8 @@ function getClient(): OpenAI {
  * On failure, returns null (caller should not block save).
  */
 export async function getAddress(name: string, city?: string): Promise<string | null> {
-  const cityPart = city?.trim() ? ` in or near ${city}` : "";
+  const effectiveCity = city?.trim().toLowerCase() === "unknown" ? "" : city?.trim();
+  const cityPart = effectiveCity ? ` in or near ${effectiveCity}` : "";
   const prompt = `What is the street address of "${name}"${cityPart}? Reply with ONLY the address in the format "123 Main St, City, Country". If you don't know with reasonable confidence, reply with exactly: null`;
 
   try {

@@ -211,7 +211,11 @@ export function UploadScreen({ navigation }: UploadScreenProps) {
       {step === "loading" && (
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#4f46e5" />
-          <Text style={styles.loadingText}>Analyzing clip...</Text>
+          <Text style={styles.loadingText}>
+            {mediaFiles.length > 1
+              ? `Analyzing ${mediaFiles.length} images…`
+              : "Analyzing clip…"}
+          </Text>
         </View>
       )}
 

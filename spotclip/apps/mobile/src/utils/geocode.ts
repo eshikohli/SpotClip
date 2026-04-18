@@ -33,7 +33,12 @@ export async function geocodePlace(
   }
 
   // Prefer address when available — much more precise than "name city"
-  const searchQuery = address?.trim() ? address.trim() : `${name} ${city}`;
+  const effectiveCity = city?.trim().toLowerCase() === "unknown" ? "" : city?.trim();
+  const searchQuery = address?.trim()
+    ? address.trim()
+    : effectiveCity
+    ? `${name} ${effectiveCity}`
+    : name;
 
   try {
     const url = `${NOMINATIM_URL}?q=${encodeURIComponent(searchQuery)}&format=json&limit=1`;

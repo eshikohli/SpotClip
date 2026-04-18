@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -40,79 +41,112 @@ export function MapScreen() {
   const [nearbySpots, setNearbySpots] = useState<NearbyPlace[]>([]);
   const mapRef = useRef<MapView>(null);
 
+  // Track which place IDs have already been geocoded so re-focusing the tab
+  // only processes newly-added places instead of reloading everything.
+  const geocodedIds = useRef(new Set<string>());
+  const initialLoadDone = useRef(false);
+
   useEffect(() => {
-    let cancelled = false;
+    // Request location permission once on mount — non-blocking
+    Location.requestForegroundPermissionsAsync().then(({ status: permStatus }) => {
+      if (permStatus === "granted") {
+        Location.getCurrentPositionAsync({})
+          .then((loc) => {
+            setUserLocation({
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+            });
+          })
+          .catch(() => {});
+      }
+    });
+  }, []);
 
-    async function load() {
-      // Request location permission — non-blocking, map works without it
-      Location.requestForegroundPermissionsAsync().then(({ status: permStatus }) => {
-        if (permStatus === "granted") {
-          Location.getCurrentPositionAsync({}).then((loc) => {
-            if (!cancelled) {
-              setUserLocation({
-                latitude: loc.coords.latitude,
-                longitude: loc.coords.longitude,
-              });
-            }
-          }).catch(() => {});
-        }
-      });
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
 
-      // Fetch all collections and gather unique places (preserving collectionId)
-      let allPlaces: (ExtractedPlace & { collectionId: string })[] = [];
-      try {
-        const data = await getCollections();
-        const seen = new Set<string>();
-        for (const col of data.collections) {
-          for (const place of col.places) {
-            if (!seen.has(place.id)) {
-              seen.add(place.id);
-              allPlaces.push({ ...place, collectionId: col.id });
+      async function load() {
+        // Fetch all collections and gather unique places (preserving collectionId)
+        let allPlaces: (ExtractedPlace & { collectionId: string })[] = [];
+        try {
+          const data = await getCollections();
+          const seen = new Set<string>();
+          for (const col of data.collections) {
+            for (const place of col.places) {
+              if (!seen.has(place.id)) {
+                seen.add(place.id);
+                allPlaces.push({ ...place, collectionId: col.id });
+              }
             }
           }
+        } catch {
+          if (!cancelled && !initialLoadDone.current) setStatus("error");
+          return;
         }
-      } catch {
-        if (!cancelled) setStatus("error");
-        return;
-      }
 
-      if (cancelled) return;
-
-      setProgress({ done: 0, total: allPlaces.length, failed: 0 });
-
-      // Geocode sequentially to respect Nominatim's rate limit
-      const resolved: PlaceWithCoords[] = [];
-      let failed = 0;
-
-      for (const place of allPlaces) {
         if (cancelled) return;
 
-        const coords = await geocodePlace(place.name, place.city_guess, place.address);
+        // Only geocode places we haven't processed yet
+        const newPlaces = allPlaces.filter((p) => !geocodedIds.current.has(p.id));
 
-        if (coords) {
-          resolved.push({ ...place, coords });
-        } else {
-          failed++;
+        if (newPlaces.length === 0) {
+          if (!initialLoadDone.current) {
+            setStatus("ready");
+            initialLoadDone.current = true;
+          }
+          return;
         }
 
-        if (!cancelled) {
-          setProgress((p) => ({ ...p, done: p.done + 1, failed }));
+        if (!initialLoadDone.current) {
+          setProgress({ done: 0, total: newPlaces.length, failed: 0 });
         }
 
-        // Polite delay for Nominatim (cached results return instantly, so this
-        // only adds noticeable delay for fresh network requests)
-        await new Promise((r) => setTimeout(r, 250));
+        // Geocode sequentially to respect Nominatim's rate limit
+        const resolved: PlaceWithCoords[] = [];
+        let failed = 0;
+
+        for (const place of newPlaces) {
+          if (cancelled) return;
+
+          const coords = await geocodePlace(place.name, place.city_guess, place.address);
+          geocodedIds.current.add(place.id);
+
+          if (coords) {
+            resolved.push({ ...place, coords });
+          } else {
+            failed++;
+          }
+
+          if (!cancelled && !initialLoadDone.current) {
+            setProgress((p) => ({ ...p, done: p.done + 1, failed }));
+          }
+
+          // Polite delay for Nominatim (cached results return instantly, so this
+          // only adds noticeable delay for fresh network requests)
+          await new Promise((r) => setTimeout(r, 250));
+        }
+
+        if (cancelled) return;
+
+        setPlaces((prev) => {
+          const existingIds = new Set(prev.map((p) => p.id));
+          const brandNew = resolved.filter((p) => !existingIds.has(p.id));
+          return brandNew.length > 0 ? [...prev, ...brandNew] : prev;
+        });
+
+        if (!initialLoadDone.current) {
+          setStatus("ready");
+          initialLoadDone.current = true;
+        }
       }
 
-      if (cancelled) return;
-
-      setPlaces(resolved);
-      setStatus("ready");
-    }
-
-    load();
-    return () => { cancelled = true; };
-  }, []);
+      load();
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   if (status === "loading") {
     const pct =

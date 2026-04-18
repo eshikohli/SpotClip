@@ -34,28 +34,21 @@ function mimeForFile(filePath: string): "image/jpeg" | "image/png" | "image/gif"
   return map[ext] ?? "image/jpeg";
 }
 
-// ── Build image content parts for the API ────────────────────────────
-function buildImageParts(
-  files: Express.Multer.File[],
-): OpenAI.Chat.Completions.ChatCompletionContentPart[] {
-  return files.map((f) => {
-    const data = fs.readFileSync(f.path);
-    const base64 = data.toString("base64");
-    const mime = f.mimetype?.startsWith("image/")
-      ? f.mimetype
-      : mimeForFile(f.originalname);
-    return {
-      type: "image_url" as const,
-      image_url: {
-        url: `data:${mime};base64,${base64}`,
-        detail: "low" as const,
-      },
-    };
-  });
+// ── Build a single image content part ───────────────────────────────
+function buildImagePart(
+  file: Express.Multer.File,
+): OpenAI.Chat.Completions.ChatCompletionContentPart {
+  const data = fs.readFileSync(file.path);
+  const base64 = data.toString("base64");
+  const mime = file.mimetype?.startsWith("image/") ? file.mimetype : mimeForFile(file.originalname);
+  return {
+    type: "image_url" as const,
+    image_url: { url: `data:${mime};base64,${base64}`, detail: "low" as const },
+  };
 }
 
 // ── The prompt ───────────────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are a place-extraction assistant. You receive one or more images from a social-media clip. Identify every real, specific, named place visible or referenced in the images (restaurants, cafés, bars, landmarks, parks, shops, etc.).
+const SYSTEM_PROMPT = `You are a place-extraction assistant. You receive one image from a social-media clip. Identify the most prominent real, specific, named place visible or referenced in the image (restaurant, café, bar, landmark, park, shop, etc.).
 
 Return ONLY valid JSON — no markdown fences, no commentary:
 {
@@ -63,8 +56,9 @@ Return ONLY valid JSON — no markdown fences, no commentary:
     {
       "name": "<place name>",
       "city_guess": "<city or region>",
+      "address": "<full street address, or null if unknown>",
       "confidence": <0-1>,
-      "evidence": { "source": "frame", "index": <0-based image index> }
+      "evidence": { "source": "frame", "index": 0 }
     }
   ]
 }
@@ -73,14 +67,16 @@ Rules:
 - "name" must be the specific name of a real place (e.g. "Blue Bottle Coffee", "Colosseum").
 - Do NOT include generic descriptions like "a restaurant", "the beach", "a coffee shop".
 - "city_guess" is your best guess at the city or region.
+- "address" is the full street address of the place (e.g. "300 Webster St, Oakland, CA 94607"). Use your knowledge to provide it. Set to null only if you genuinely have no idea.
 - "confidence" reflects how sure you are (0 = guess, 1 = certain).
-- "index" is the 0-based index of the image where you found the evidence.
+- "index" is always 0 (this is a single-image call; the caller will set the correct index).
 - If you find no real places, return { "places": [] }.`;
 
 // ── Raw response shape from the model ────────────────────────────────
 interface VisionPlace {
   name: string;
   city_guess?: string;
+  address?: string | null;
   confidence?: number;
   evidence?: { source: string; index: number };
 }
@@ -111,46 +107,61 @@ function dedupe(places: VisionPlace[]): VisionPlace[] {
   });
 }
 
+// ── Extract from a single image, stamping the original file index ────
+async function extractPlaceFromImage(
+  file: Express.Multer.File,
+  originalIndex: number,
+): Promise<VisionPlace[]> {
+  const client = getClient();
+
+  const response = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    max_tokens: 512,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Extract the main place from this image." },
+          buildImagePart(file),
+        ],
+      },
+    ],
+  });
+
+  const raw = response.choices[0]?.message?.content ?? "";
+  log(`Image ${originalIndex} raw:`, raw);
+
+  const cleaned = raw.replace(/```json\s*/g, "").replace(/```/g, "").trim();
+  const parsed = JSON.parse(cleaned) as { places?: VisionPlace[] };
+
+  if (!Array.isArray(parsed.places)) return [];
+
+  // Stamp the correct image index onto each result
+  return parsed.places.map((p) => ({
+    ...p,
+    evidence: { source: "frame" as const, index: originalIndex },
+  }));
+}
+
 // ── Main extraction function ─────────────────────────────────────────
 export async function extractPlacesFromImages(
   files: Express.Multer.File[],
 ): Promise<{ places: ExtractedPlace[]; error?: string }> {
   try {
-    const client = getClient();
-    const imageParts = buildImageParts(files);
+    log(`Processing ${files.length} image(s) in parallel…`);
 
-    log(`Sending ${files.length} image(s) to OpenAI Vision…`);
+    // One OpenAI call per image — guarantees each photo gets its own extraction
+    const perImageResults = await Promise.all(
+      files.map((file, i) => extractPlaceFromImage(file, i).catch(() => [] as VisionPlace[])),
+    );
 
-    const response = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      max_tokens: 1024,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: `I have ${files.length} image(s) from a TikTok clip. Extract all real place names.` },
-            ...imageParts,
-          ],
-        },
-      ],
-    });
+    const allRaw = perImageResults.flat();
+    log(`Raw places before dedupe: ${allRaw.length}`);
 
-    const raw = response.choices[0]?.message?.content ?? "";
-    log("Raw response:", raw);
-
-    // Parse JSON — strip markdown fences if the model adds them anyway
-    const cleaned = raw.replace(/```json\s*/g, "").replace(/```/g, "").trim();
-    const parsed = JSON.parse(cleaned) as { places?: VisionPlace[] };
-
-    if (!Array.isArray(parsed.places)) {
-      log("Unexpected response shape, returning empty");
-      return { places: [] };
-    }
-
-    // Post-process: trim, filter generics, dedupe
+    // Post-process: trim, filter generics, dedupe across all images
     const processed = dedupe(
-      parsed.places
+      allRaw
         .map((p) => ({ ...p, name: p.name.trim() }))
         .filter((p) => !isGeneric(p.name)),
     );
@@ -159,6 +170,7 @@ export async function extractPlacesFromImages(
       id: uuid(),
       name: p.name,
       city_guess: p.city_guess?.trim() ?? "Unknown",
+      address: p.address?.trim() || null,
       confidence: Math.max(0, Math.min(1, p.confidence ?? 0.5)),
       evidence: {
         source: "frame" as const,
@@ -166,7 +178,7 @@ export async function extractPlacesFromImages(
       },
     }));
 
-    log(`Extracted ${places.length} place(s)`);
+    log(`Extracted ${places.length} place(s) from ${files.length} image(s)`);
     return { places };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Vision extraction failed";
