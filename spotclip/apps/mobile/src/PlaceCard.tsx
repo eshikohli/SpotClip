@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Share } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
 import type { ExtractedPlace } from "@spotclip/shared";
@@ -37,6 +37,14 @@ export function PlaceCard({
   const hasNote = (place.note ?? "").trim().length > 0;
   const tags = place.tags ?? [];
   const showNoteTap = hasNote && onViewNote !== undefined;
+  const formatTag = (tag: string) =>
+    tag.replace(/\b\w/g, (c) => c.toUpperCase());
+  const handleShare = async () => {
+    const parts: string[] = [`📍 ${place.name}`];
+    if ((place.address ?? "").trim().length > 0) parts.push(place.address!);
+    if ((place.note ?? "").trim().length > 0) parts.push(place.note!);
+    await Share.share({ message: parts.join("\n") });
+  };
   const hasAddress = (place.address ?? "").trim().length > 0;
 
   const InfoBlock = (
@@ -83,7 +91,7 @@ export function PlaceCard({
             return (
               <View key={tag} style={[styles.tagChip, { backgroundColor }]}>
                 <Text style={[styles.tagChipText, { color }, isVisited && styles.textVisited]}>
-                  {tag}
+                  {formatTag(tag)}
                 </Text>
               </View>
             );
@@ -151,6 +159,13 @@ export function PlaceCard({
               />
             </TouchableOpacity>
           )}
+          <TouchableOpacity
+            onPress={handleShare}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={styles.iconBtn}
+          >
+            <Ionicons name="share-outline" size={22} color="#999" />
+          </TouchableOpacity>
           {onDelete !== undefined && (
             <TouchableOpacity
               onPress={() => onDelete(place.id)}

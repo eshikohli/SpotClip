@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useLayoutEffect, useMemo } from "react";
+import React, { useState, useCallback, useLayoutEffect, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import { getDistance } from "../utils/nearbySpots";
 import type { CollectionDetailScreenProps } from "../navigation/types";
 
 const NEAR_ME_RADIUS_MILES = 5;
+const formatTag = (tag: string) => tag.replace(/\b\w/g, (c) => c.toUpperCase());
 
 export function CollectionDetailScreen({ route, navigation }: CollectionDetailScreenProps) {
   const { collectionId } = route.params;
@@ -59,6 +60,41 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
       navigation.setOptions({ title: collection.name });
     }
   }, [navigation, collection]);
+
+  // Auto-fetch distances in background when collection loads
+  useEffect(() => {
+    if (!collection) return;
+    let active = true;
+    (async () => {
+      let loc = userLocation;
+      if (!loc) {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") return;
+        try {
+          const position = await Location.getCurrentPositionAsync({});
+          loc = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+          if (active) setUserLocation(loc);
+        } catch {
+          return;
+        }
+      }
+      const geocoded = await Promise.all(
+        collection.places.map(async (p) => ({
+          id: p.id,
+          coords: await geocodePlace(p.name, p.city_guess, p.address),
+        })),
+      );
+      if (!active) return;
+      const distances = new Map<string, number>();
+      for (const { id, coords } of geocoded) {
+        if (coords && loc) {
+          distances.set(id, getDistance(loc.latitude, loc.longitude, coords.latitude, coords.longitude));
+        }
+      }
+      setNearMeDistances(distances);
+    })();
+    return () => { active = false; };
+  }, [collection?.id]);
 
   const sortedPlaces = useMemo(() => {
     if (!collection) return [];
@@ -102,6 +138,12 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
   async function handleNearMeToggle() {
     if (nearMode) {
       setNearMode(false);
+      return;
+    }
+
+    // If distances already loaded by background fetch, just enable filter
+    if (nearMeDistances.size > 0) {
+      setNearMode(true);
       return;
     }
 
@@ -318,7 +360,7 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
               ]}
               onPress={() => handleTagPress(tag)}
             >
-              <Text style={[styles.tagChipText, { color }]}>{tag}</Text>
+              <Text style={[styles.tagChipText, { color }]}>{formatTag(tag)}</Text>
             </TouchableOpacity>
           );
         })}
@@ -344,7 +386,7 @@ export function CollectionDetailScreen({ route, navigation }: CollectionDetailSc
         keyExtractor={(item) => item.id}
         ListHeaderComponent={tagFilterHeader}
         renderItem={({ item }) => {
-          const dist = nearMode ? nearMeDistances.get(item.id) : undefined;
+          const dist = nearMeDistances.get(item.id);
           const subtitle =
             dist !== undefined ? `${item.city_guess} • ${dist.toFixed(1)} mi` : undefined;
           return (
